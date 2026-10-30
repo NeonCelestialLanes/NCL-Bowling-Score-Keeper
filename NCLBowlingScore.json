@@ -4,8 +4,9 @@
   "Punchline": "Keep score at Neon Celestial Lanes.",
   "Description": "Opens a scorecard with /nclbowling. Roll Ball sends /dice or /random, parses the throw, and tracks strikes, spares, and cumulative score.",
   "InternalName": "NCLBowlingScore",
-  "AssemblyVersion": "1.0.0.0",
+  "AssemblyVersion": "1.0.1.0",
   "RepoUrl": "https://github.com/NeonCelestialLanes/NCL-Bowling-Score-Keeper",
+  "IconUrl": "https://raw.githubusercontent.com/NeonCelestialLanes/NCL-Bowling-Score-Keeper/main/images/icon.png",
   "ApplicableVersion": "any",
   "DalamudApiLevel": 15,
   "Tags": ["minigame", "bowling", "random", "ncl"]
