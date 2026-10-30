@@ -202,6 +202,8 @@ public sealed class BowlingWindow : Window, IDisposable
     private string? pendingChat;
     private long pendingChatAt;
     private long commandReadyAt;
+    private int markPins;
+    private ulong? lastScoredId;
 
     public BowlingWindow(
         IDalamudPluginInterface pluginInterface,
@@ -294,6 +296,7 @@ public sealed class BowlingWindow : Window, IDisposable
         var extra = overshot
             ? $" Rolled {pins} with fewer pins standing. Gutter."
             : string.Empty;
+        this.lastScoredId = lane.ContentId;
         this.status = $"{who}: {lane.Game.DescribeLastMark(counted)}{extra}";
         if (!lane.Game.IsFrameInProgress)
         {
@@ -387,6 +390,7 @@ public sealed class BowlingWindow : Window, IDisposable
             this.rollClickArmed = true;
             this.pendingChat = null;
             this.commandReadyAt = 0;
+            this.lastScoredId = null;
             this.status = "Fresh lanes. Don't choke.";
         }
 
@@ -396,6 +400,9 @@ public sealed class BowlingWindow : Window, IDisposable
 
         ImGui.PopStyleColor();
         this.labelFont.Pop();
+
+        this.DrawLaneFixes(onApproach);
+
         NeonTheme.GlowSeparator();
 
         this.labelFont.Push();
@@ -486,6 +493,131 @@ public sealed class BowlingWindow : Window, IDisposable
         if (count <= 1)
             return "LANES  ·  solo (party members and guests can be added)";
         return $"LANES  ·  {count} bowlers (party + guests)";
+    }
+
+    private void DrawLaneFixes(BowlerLane? onApproach)
+    {
+        var canFix = onApproach is not null && !onApproach.Game.IsComplete;
+        var canUndo = this.FindLastScoredLane() is not null;
+
+        this.labelFont.Push();
+        ImGui.PushStyleColor(ImGuiCol.Text, NeonTheme.Ice);
+
+        ImGui.BeginDisabled(!canFix);
+        if (NeonTheme.GlowButton("  GUTTER  ", NeonTheme.Magenta) && canFix)
+            this.ApplyManualThrow(onApproach!, 0);
+        ImGui.SameLine();
+        if (NeonTheme.GlowButton("  PASS  ", NeonTheme.Cyan) && canFix)
+            this.PassOpenFrame(onApproach!);
+        ImGui.EndDisabled();
+
+        ImGui.SameLine();
+        ImGui.BeginDisabled(!canUndo);
+        if (NeonTheme.GlowButton("  UNDO  ", NeonTheme.Gold) && canUndo)
+            this.UndoLastThrow();
+        ImGui.EndDisabled();
+
+        ImGui.SameLine();
+        ImGui.SetNextItemWidth(52);
+        ImGui.InputInt("##mark_pins", ref this.markPins, 0);
+        if (this.markPins < 0)
+            this.markPins = 0;
+        if (this.markPins > 11)
+            this.markPins = 11;
+
+        ImGui.SameLine();
+        ImGui.BeginDisabled(!canFix);
+        if (NeonTheme.GlowButton("  MARK  ", NeonTheme.Cyan) && canFix)
+            this.ApplyManualThrow(onApproach!, this.markPins);
+        ImGui.EndDisabled();
+
+        ImGui.PopStyleColor();
+        this.labelFont.Pop();
+        ImGui.TextColored(NeonTheme.Muted, "Gutter, pass, undo, or mark a throw the scorecard missed.");
+    }
+
+    private void ApplyManualThrow(BowlerLane lane, int pins)
+    {
+        this.awaitingLocalRoll = false;
+        this.pendingChat = null;
+        if (!this.lanes.TryApplyRoll(lane, pins, out var counted, out var overshot, out var error))
+        {
+            this.status = error ?? "Could not mark that throw.";
+            return;
+        }
+
+        this.lastScoredId = lane.ContentId;
+        var extra = overshot
+            ? $" Rolled {pins} with fewer pins standing. Gutter."
+            : string.Empty;
+        this.status = $"{lane.Name}: {lane.Game.DescribeLastMark(counted)}{extra}";
+        if (!lane.Game.IsFrameInProgress)
+        {
+            var next = this.lanes.WhoseTurn();
+            if (next is not null)
+                this.status += $"  Next up: {next.Name}.";
+        }
+    }
+
+    private void PassOpenFrame(BowlerLane lane)
+    {
+        this.awaitingLocalRoll = false;
+        this.pendingChat = null;
+        if (!lane.Game.TryPassFrame(out var gutters, out var error))
+        {
+            this.status = error ?? "Could not pass that frame.";
+            return;
+        }
+
+        this.lastScoredId = lane.ContentId;
+        var next = this.lanes.WhoseTurn();
+        this.status = $"{lane.Name} passed ({gutters} gutter{(gutters == 1 ? string.Empty : "s")}).";
+        if (next is not null)
+            this.status += $"  Next up: {next.Name}.";
+    }
+
+    private void UndoLastThrow()
+    {
+        var lane = this.FindLastScoredLane();
+        if (lane is null)
+        {
+            this.status = "Nothing to undo.";
+            return;
+        }
+
+        if (!lane.Game.TryUndo(out var error))
+        {
+            this.status = error ?? "Could not undo that throw.";
+            return;
+        }
+
+        this.awaitingLocalRoll = false;
+        this.pendingChat = null;
+        this.status = $"Undid the last ball on {lane.Name}'s lane.";
+        if (lane.Game.Rolls.Count == 0)
+            this.lastScoredId = null;
+    }
+
+    private BowlerLane? FindLastScoredLane()
+    {
+        if (this.lastScoredId is ulong id)
+        {
+            foreach (var lane in this.lanes.Visible)
+            {
+                if (lane.ContentId == id && lane.Game.Rolls.Count > 0)
+                    return lane;
+            }
+        }
+
+        BowlerLane? fallback = null;
+        foreach (var lane in this.lanes.Visible)
+        {
+            if (lane.Game.Rolls.Count == 0)
+                continue;
+            fallback = lane;
+        }
+
+        return fallback;
     }
 
     private void TryAddGuest()

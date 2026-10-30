@@ -73,6 +73,49 @@ public sealed class BowlingGame
         return true;
     }
 
+    public bool TryUndo(out string? error)
+    {
+        error = null;
+        if (this.rolls.Count == 0)
+        {
+            error = "Nothing to undo on this lane.";
+            return false;
+        }
+
+        this.rolls.RemoveAt(this.rolls.Count - 1);
+        this.IsComplete = this.HasFinishedTenthFrame();
+        return true;
+    }
+
+    /// <summary>
+    /// Gutters any remaining balls in the open frame so the next bowler can go.
+    /// </summary>
+    public bool TryPassFrame(out int gutters, out string? error)
+    {
+        gutters = 0;
+        error = null;
+        if (this.IsComplete)
+        {
+            error = "That game is already finished.";
+            return false;
+        }
+
+        var safety = 0;
+        while (!this.IsComplete && safety++ < 4)
+        {
+            var framesBefore = this.CompletedFrames;
+            var inProgress = this.IsFrameInProgress;
+            if (!this.TryAddRoll(0, out _, out _, out error))
+                return false;
+
+            gutters++;
+            if (this.IsComplete || this.CompletedFrames > framesBefore || (!inProgress && !this.IsFrameInProgress))
+                break;
+        }
+
+        return gutters > 0;
+    }
+
     public IReadOnlyList<FrameView> GetFrames()
     {
         var frames = new FrameView[MaxFrames];
