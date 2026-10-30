@@ -214,6 +214,80 @@ internal static class NeonTheme
         ImGui.Dummy(new Vector2(width, height + 8f));
     }
 
+    public static int GlowTabBar(ReadOnlySpan<string> labels, int selected)
+    {
+        var n = labels.Length;
+        if (n <= 0)
+            return 0;
+
+        selected = Math.Clamp(selected, 0, n - 1);
+        var avail = ImGui.GetContentRegionAvail().X;
+        const float height = 30f;
+        const float padX = 14f;
+        const float gap = 4f;
+        const float radius = 7f;
+        var row = ImGui.GetCursorScreenPos();
+        var dl = ImGui.GetWindowDrawList();
+        var barY = row.Y + height;
+        Vector2 activeMin = default;
+        Vector2 activeMax = default;
+
+        for (var i = 0; i < n; i++)
+        {
+            if (i > 0)
+                ImGui.SameLine(0, gap);
+
+            var text = labels[i].Trim();
+            var width = ImGui.CalcTextSize(text).X + (padX * 2f);
+            ImGui.PushID(i);
+            var clicked = ImGui.InvisibleButton("##ncl_tab", new Vector2(width, height));
+            var hovered = ImGui.IsItemHovered();
+            var min = ImGui.GetItemRectMin();
+            var max = ImGui.GetItemRectMax();
+            ImGui.PopID();
+
+            var on = i == selected;
+            var accent = TabAccent(i);
+            var ink = on ? accent : hovered ? Mix(accent, Ice, 0.35f) : Mix(accent, Ice, 0.55f);
+            var fill = Mix(new Vector4(0.08f, 0.02f, 0.14f, 0.96f), accent, on ? 0.42f : hovered ? 0.22f : 0.10f);
+
+            dl.AddRectFilled(min, max, Col(fill), radius, ImDrawFlags.RoundCornersTop);
+            dl.AddRect(min, max, Col(WithAlpha(accent, on ? 0.95f : hovered ? 0.75f : 0.55f)), radius, ImDrawFlags.RoundCornersTop, on ? 1.6f : 1.1f);
+            if (on)
+                dl.AddLine(new Vector2(min.X + 1f, max.Y), new Vector2(max.X - 1f, max.Y), Col(fill), 3f);
+
+            var textSize = ImGui.CalcTextSize(text);
+            var textPos = new Vector2(min.X + ((width - textSize.X) * 0.5f), min.Y + ((height - textSize.Y) * 0.5f) - 1f);
+            dl.AddText(textPos, Col(ink), text);
+
+            if (on)
+            {
+                activeMin = min;
+                activeMax = max;
+            }
+
+            if (clicked && !on)
+                selected = i;
+        }
+
+        var rail = TabAccent(selected);
+        dl.AddLine(new Vector2(row.X, barY), new Vector2(activeMin.X + 1f, barY), Col(WithAlpha(rail, 0.75f)), 1.4f);
+        dl.AddLine(new Vector2(activeMax.X - 1f, barY), new Vector2(row.X + avail, barY), Col(WithAlpha(rail, 0.75f)), 1.4f);
+        ImGui.Dummy(new Vector2(avail, 8f));
+        return selected;
+    }
+
+    private static Vector4 TabAccent(int index) => index switch
+    {
+        0 => Cyan,
+        1 => Ice,
+        2 => Gold,
+        _ => Magenta,
+    };
+
+    private static Vector4 Mix(Vector4 a, Vector4 b, float t) =>
+        new(a.X + ((b.X - a.X) * t), a.Y + ((b.Y - a.Y) * t), a.Z + ((b.Z - a.Z) * t), a.W + ((b.W - a.W) * t));
+
     public static bool GlowButton(string label, Vector4 glow)
     {
         var start = ImGui.GetCursorScreenPos();

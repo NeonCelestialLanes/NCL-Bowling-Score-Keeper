@@ -30,6 +30,8 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal IObjectTable ObjectTable { get; init; } = null!;
     [PluginService] internal IPlayerState PlayerState { get; init; } = null!;
     [PluginService] internal ITextureProvider TextureProvider { get; init; } = null!;
+    [PluginService] internal IDataManager DataManager { get; init; } = null!;
+    [PluginService] internal IUnlockState UnlockState { get; init; } = null!;
 
     private BowlingWindow Window { get; set; } = null!;
     private WindowSystem WindowSystem { get; } = new("FFXIVBowlingSystem");
@@ -41,7 +43,9 @@ public sealed class Plugin : IDalamudPlugin
         IPartyList partyList,
         IObjectTable objectTable,
         IPlayerState playerState,
-        ITextureProvider textureProvider)
+        ITextureProvider textureProvider,
+        IDataManager dataManager,
+        IUnlockState unlockState)
     {
         this.PluginInterface = pluginInterface;
         this.CommandManager = commandManager;
@@ -50,8 +54,10 @@ public sealed class Plugin : IDalamudPlugin
         this.ObjectTable = objectTable;
         this.PlayerState = playerState;
         this.TextureProvider = textureProvider;
+        this.DataManager = dataManager;
+        this.UnlockState = unlockState;
 
-        this.Window = new BowlingWindow(pluginInterface, partyList, objectTable, playerState, textureProvider);
+        this.Window = new BowlingWindow(pluginInterface, partyList, objectTable, playerState, textureProvider, dataManager, unlockState);
         this.WindowSystem.AddWindow(this.Window);
 
         this.CommandManager.AddHandler(CommandName, new CommandInfo(this.OnCommand)
@@ -203,7 +209,9 @@ public sealed class BowlingWindow : Window, IDisposable
     private readonly IObjectTable objectTable;
     private readonly IPlayerState playerState;
     private readonly LifestreamTravel lifestream;
+    private readonly ThrowEmote throwEmote;
     private readonly IFontHandle labelFont;
+    private readonly IFontHandle tabFont;
     private readonly ISharedImmediateTexture? logo;
     private readonly PartyLanes lanes = new();
     private string status = "Walk up. Tell us you're ready to dominate the lanes.";
@@ -212,13 +220,13 @@ public sealed class BowlingWindow : Window, IDisposable
     private bool rollClickArmed = true;
     private string lastRollKey = string.Empty;
     private long lastRollTicks;
-    private string? pendingChat;
-    private long pendingChatAt;
+    private readonly System.Collections.Generic.List<(string Command, long At)> outgoing = new();
     private long commandReadyAt;
     private int markPins;
     private ulong? lastScoredId;
     private bool awaitingLocalDart;
     private bool dartClickArmed = true;
+    private int houseTab;
     private string lastDartKey = string.Empty;
     private long lastDartTicks;
     private int markDart = 2;
@@ -232,13 +240,16 @@ public sealed class BowlingWindow : Window, IDisposable
         IPartyList partyList,
         IObjectTable objectTable,
         IPlayerState playerState,
-        ITextureProvider textureProvider)
+        ITextureProvider textureProvider,
+        IDataManager dataManager,
+        IUnlockState unlockState)
         : base("NCL Bowling Score")
     {
         this.partyList = partyList;
         this.objectTable = objectTable;
         this.playerState = playerState;
         this.lifestream = new LifestreamTravel(pluginInterface);
+        this.throwEmote = new ThrowEmote(dataManager, unlockState);
         var dir = pluginInterface.AssemblyLocation.DirectoryName ?? string.Empty;
         var fontPath = Path.Combine(dir, "Assets", "LuckiestGuy-Regular.ttf");
         var logoPath = Path.Combine(dir, "Assets", "ncl-logo.png");
@@ -250,6 +261,13 @@ public sealed class BowlingWindow : Window, IDisposable
                 toolkit.Font = toolkit.AddFontFromFile(fontPath, new SafeFontConfig { SizePx = 17 });
             else
                 toolkit.AddDalamudDefaultFont(17);
+        }));
+        this.tabFont = pluginInterface.UiBuilder.FontAtlas.NewDelegateFontHandle(e => e.OnPreBuild(toolkit =>
+        {
+            if (File.Exists(fontPath))
+                toolkit.Font = toolkit.AddFontFromFile(fontPath, new SafeFontConfig { SizePx = 15 });
+            else
+                toolkit.AddDalamudDefaultFont(15);
         }));
         this.logo = File.Exists(logoPath) ? textureProvider.GetFromFile(logoPath) : null;
         this.menuFood = File.Exists(foodPath) ? textureProvider.GetFromFile(foodPath) : null;
@@ -273,7 +291,7 @@ public sealed class BowlingWindow : Window, IDisposable
         {
             this.awaitingLocalRoll = false;
             this.awaitingLocalDart = false;
-            this.pendingChat = null;
+            this.outgoing.Clear();
             this.commandReadyAt = Environment.TickCount64 + 1500;
             this.status = "The game blocked that throw. Wait it out, then roll again.";
             return true;
@@ -297,39 +315,30 @@ public sealed class BowlingWindow : Window, IDisposable
         NeonTheme.DrawBackdrop();
         NeonTheme.BrandHeader(this.logo?.GetWrapOrEmpty(), this.labelFont);
 
-        if (ImGui.BeginTabBar("ncl_house_tabs", ImGuiTabBarFlags.FittingPolicyScroll))
-        {
-            if (ImGui.BeginTabItem("  BOWLING  "))
-            {
-                if (NclVenue.IsAt(this.playerState))
-                    this.DrawBowlingTab();
-                else
-                    this.DrawVenueLock("then bowl.");
-                ImGui.EndTabItem();
-            }
+        this.tabFont.Push();
+        this.houseTab = NeonTheme.GlowTabBar(["BOWLING", "DARTS", "MENU", "CARRD"], this.houseTab);
+        this.tabFont.Pop();
 
-            if (ImGui.BeginTabItem("  DARTS  "))
-            {
+        switch (this.houseTab)
+        {
+            case 1:
                 if (NclVenue.IsAt(this.playerState))
                     this.DrawDartsTab();
                 else
                     this.DrawVenueLock("then throw.");
-                ImGui.EndTabItem();
-            }
-
-            if (ImGui.BeginTabItem("  MENU  "))
-            {
+                break;
+            case 2:
                 this.DrawMenuTab();
-                ImGui.EndTabItem();
-            }
-
-            if (ImGui.BeginTabItem("  CARRD  "))
-            {
+                break;
+            case 3:
                 this.DrawCarrdTab();
-                ImGui.EndTabItem();
-            }
-
-            ImGui.EndTabBar();
+                break;
+            default:
+                if (NclVenue.IsAt(this.playerState))
+                    this.DrawBowlingTab();
+                else
+                    this.DrawVenueLock("then bowl.");
+                break;
         }
 
         NeonTheme.StatusBar(this.status);
@@ -338,7 +347,7 @@ public sealed class BowlingWindow : Window, IDisposable
 
     private void DrawVenueLock(string verb)
     {
-        this.pendingChat = null;
+        this.outgoing.Clear();
         this.awaitingLocalRoll = false;
         this.awaitingLocalDart = false;
         this.labelFont.Push();
@@ -393,8 +402,7 @@ public sealed class BowlingWindow : Window, IDisposable
         {
             this.rollClickArmed = false;
             this.awaitingLocalRoll = true;
-            this.pendingChat = this.RollCommand();
-            this.pendingChatAt = Environment.TickCount64 + Random.Shared.Next(100, 301);
+            this.EnqueueChat(this.RollCommand());
             this.status = $"Bowling… {local!.Game.RemainingPins} pin(s) still standing. Make it dramatic.";
         }
 
@@ -404,20 +412,66 @@ public sealed class BowlingWindow : Window, IDisposable
             this.lanes.ResetVisible();
             this.awaitingLocalRoll = false;
             this.rollClickArmed = true;
-            this.pendingChat = null;
+            this.outgoing.Clear();
             this.commandReadyAt = 0;
             this.lastScoredId = null;
             this.status = "Fresh lanes. Don't choke.";
         }
 
+        ImGui.SameLine();
+        if (NeonTheme.GlowButton("  RULES  ", NeonTheme.Gold))
+            ImGui.OpenPopup("HOUSE RULES##ncl_bowl_rules");
+
         ImGui.PopStyleColor();
         this.labelFont.Pop();
 
+        this.DrawBowlingRulesPopup();
         this.DrawLaneFixes(onApproach);
         NeonTheme.GlowSeparator();
         this.DrawGuestRow();
         NeonTheme.GlowSeparator();
         this.DrawLaneList(onApproach);
+    }
+
+    private void DrawBowlingRulesPopup()
+    {
+        ImGui.SetNextWindowSize(new Vector2(560, 0), ImGuiCond.Always);
+        if (!ImGui.BeginPopupModal("HOUSE RULES##ncl_bowl_rules", ImGuiWindowFlags.AlwaysAutoResize))
+            return;
+
+        ImGui.TextColored(NeonTheme.Magenta, "NEON CELESTIAL LANES  ·  BOWLING FOR HUMANS");
+        ImGui.TextColored(NeonTheme.Muted, "Never bowled? Start here. One click is one throw. Wait your turn.");
+        ImGui.Dummy(new Vector2(0, 8));
+
+        ImGui.TextColored(NeonTheme.Gold, "The idea");
+        ImGui.TextWrapped("There are 10 pins. A game is 10 frames. In each frame you get up to two throws. The number you roll is how many pins fell. We use /random 11 (or /dice party 11) so 0 through 11 can come up.");
+        ImGui.Dummy(new Vector2(0, 8));
+
+        ImGui.TextColored(NeonTheme.Gold, "What's on the scorecard");
+        ImGui.BulletText("X  —  strike. You knocked down all 10 pins on the first ball. That frame is over. You do not throw a second ball.");
+        ImGui.BulletText("/  —  spare. Your two balls in that frame add up to exactly 10. Example: 7 then 3.");
+        ImGui.BulletText("-  —  gutter / miss. Zero pins. Either you rolled a 0, or you rolled more pins than were still standing.");
+        ImGui.BulletText("A number (1–9)  —  that many pins fell on that ball.");
+        ImGui.TextWrapped("The bigger number under the marks is your running score. Strikes and spares get bonus points from later throws — the scorecard does that math.");
+        ImGui.Dummy(new Vector2(0, 8));
+
+        ImGui.TextColored(NeonTheme.Gold, "House rule: overshoot is a gutter");
+        ImGui.TextWrapped("If you roll higher than the pins still standing, that ball is a gutter (0). The extra pins don't count. 11 is always a gutter on a first ball, because only 10 pins exist.");
+        ImGui.BulletText("First ball 11 →  -   then you still get a second ball at a full rack.");
+        ImGui.BulletText("First ball 6, then 8 (only 4 standing) →  6  -   not a spare.");
+        ImGui.BulletText("First ball 7, then 3 →  7  /   that's a spare. Exactly 10.");
+        ImGui.BulletText("First ball 7, then 4 (only 3 standing) →  7  -   gutter. Not a spare.");
+        ImGui.Dummy(new Vector2(0, 8));
+
+        ImGui.TextColored(NeonTheme.Gold, "Whose turn");
+        ImGui.TextWrapped("Bowl in order. A strike ends your frame immediately — next player. After two balls (or a spare), next player. 10th frame: two balls, plus a third if you strike or spare.");
+        ImGui.Dummy(new Vector2(0, 10));
+
+        ImGui.PushStyleColor(ImGuiCol.Text, NeonTheme.Ice);
+        if (NeonTheme.GlowButton("  GOT IT  ", NeonTheme.Cyan))
+            ImGui.CloseCurrentPopup();
+        ImGui.PopStyleColor();
+        ImGui.EndPopup();
     }
 
     private void DrawDartsTab()
@@ -459,8 +513,7 @@ public sealed class BowlingWindow : Window, IDisposable
         {
             this.dartClickArmed = false;
             this.awaitingLocalDart = true;
-            this.pendingChat = this.DartCommand();
-            this.pendingChatAt = Environment.TickCount64 + Random.Shared.Next(100, 301);
+            this.EnqueueDartThrow();
             this.status = $"Darts… aiming {local!.Clock.AimLabel}. Make it stick.";
         }
 
@@ -470,20 +523,88 @@ public sealed class BowlingWindow : Window, IDisposable
             this.lanes.ResetClocks();
             this.awaitingLocalDart = false;
             this.dartClickArmed = true;
-            this.pendingChat = null;
+            this.outgoing.Clear();
             this.commandReadyAt = 0;
             this.lastDartId = null;
             this.status = "Fresh clocks. Start at 1.";
         }
 
+        ImGui.SameLine();
+        if (NeonTheme.GlowButton("  RULES  ", NeonTheme.Gold))
+            ImGui.OpenPopup("HOUSE RULES##ncl_dart_rules");
+
         ImGui.PopStyleColor();
         this.labelFont.Pop();
 
+        this.DrawDartsRulesPopup();
         this.DrawDartFixes(onOche);
         NeonTheme.GlowSeparator();
         this.DrawGuestRow();
         NeonTheme.GlowSeparator();
         this.DrawDartList(onOche);
+    }
+
+    private void DrawDartsRulesPopup()
+    {
+        const float rulesWidth = 600f;
+        ImGui.SetNextWindowSize(new Vector2(rulesWidth, 0), ImGuiCond.Always);
+        if (!ImGui.BeginPopupModal("HOUSE RULES##ncl_dart_rules", ImGuiWindowFlags.AlwaysAutoResize))
+            return;
+
+        ImGui.PushTextWrapPos(ImGui.GetCursorPos().X + rulesWidth - 36f);
+
+        ImGui.TextColored(NeonTheme.Magenta, "NEON CELESTIAL LANES  ·  DARTS FOR HUMANS");
+        ImGui.TextColored(NeonTheme.Muted, "This is not real-world darts. You are not aiming at a board. You're collecting points in order.");
+        ImGui.Dummy(new Vector2(0, 8));
+
+        ImGui.TextColored(NeonTheme.Gold, "The idea");
+        ImGui.TextWrapped("Around the Clock, easy mode: earn points 1 through 20 in order, then hit the bullseye. First person to finish wins. Your progress never resets. If you end a turn working on 7, next turn you start on 7 — you do not go back to 1.");
+        ImGui.Dummy(new Vector2(0, 8));
+
+        ImGui.TextColored(NeonTheme.Gold, "A turn");
+        ImGui.TextWrapped("When it's your turn you throw 3 darts. Each dart is one click. If you have the /throw emote, THROW DART plays that first, then rolls /random 10 (or /dice party 10). No throw emote? Just the roll. Hits let you keep going up the numbers on that same turn until you miss or run out of darts.");
+        ImGui.Dummy(new Vector2(0, 8));
+
+        ImGui.TextColored(NeonTheme.Gold, "What the roll means (numbers 1–20)");
+        RulesBullet("2, 4, 6, or 8  —  hit. You earn that point and immediately move to the next number.");
+        RulesHangBullet("3, 5, 7, or 9  —  ", "miss. You stay on the same number. Throw the rest of your darts if you have any left.");
+        RulesBullet("1 or 10  —  miss while you're on 1–20. Those two numbers are only for bullseye.");
+        ImGui.Dummy(new Vector2(0, 6));
+
+        ImGui.TextColored(NeonTheme.Gold, "Bullseye (after 20)");
+        ImGui.TextWrapped("Once you've earned 1 through 20, you only need the bullseye. Now 1 or 10 is a hit and you win. 2–9 miss.");
+        ImGui.Dummy(new Vector2(0, 6));
+
+        ImGui.TextColored(NeonTheme.Gold, "What's on the scorecard");
+        RulesBullet("The highlighted number is what you're aiming at right now.");
+        RulesBullet("Filled numbers are points you've already earned. They stay.");
+        RulesBullet("BULL is last. Finish that and the clock is done.");
+        ImGui.Dummy(new Vector2(0, 4));
+        ImGui.TextWrapped("Example: you're on 1, roll a 4 (hit) → you have 1. Next dart is for 2. Roll a 6 (hit) → you have 2. If you stop on 3, you stay on 3 next turn.");
+        ImGui.Dummy(new Vector2(0, 10));
+
+        ImGui.PopTextWrapPos();
+        ImGui.PushStyleColor(ImGuiCol.Text, NeonTheme.Ice);
+        if (NeonTheme.GlowButton("  GOT IT  ", NeonTheme.Cyan))
+            ImGui.CloseCurrentPopup();
+        ImGui.PopStyleColor();
+        ImGui.EndPopup();
+    }
+
+    private static void RulesBullet(string text)
+    {
+        ImGui.Bullet();
+        ImGui.SameLine();
+        ImGui.TextWrapped(text);
+    }
+
+    private static void RulesHangBullet(string lead, string rest)
+    {
+        ImGui.Bullet();
+        ImGui.SameLine();
+        ImGui.TextUnformatted(lead);
+        ImGui.SameLine(0, 0);
+        ImGui.TextWrapped(rest);
     }
 
     private void DrawMenuTab()
@@ -624,21 +745,50 @@ public sealed class BowlingWindow : Window, IDisposable
         return null;
     }
 
+    private void EnqueueChat(string command, long at)
+    {
+        this.outgoing.Add((command, at));
+    }
+
+    private void EnqueueChat(string command)
+    {
+        this.EnqueueChat(command, Environment.TickCount64 + Random.Shared.Next(100, 301));
+    }
+
+    private void EnqueueDartThrow()
+    {
+        var dice = this.DartCommand();
+        var firstAt = Environment.TickCount64 + Random.Shared.Next(100, 301);
+        if (this.throwEmote.IsUnlocked())
+        {
+            this.EnqueueChat("/throw", firstAt);
+            this.EnqueueChat(dice, firstAt + 1300);
+        }
+        else
+        {
+            this.EnqueueChat(dice, firstAt);
+        }
+    }
+
     private void FlushPendingChat()
     {
-        if (this.pendingChat is null || Environment.TickCount64 < this.pendingChatAt)
+        if (this.outgoing.Count == 0)
+            return;
+
+        var now = Environment.TickCount64;
+        if (now < this.outgoing[0].At || now < this.commandReadyAt)
             return;
 
         if (!NclVenue.IsAt(this.playerState))
         {
-            this.pendingChat = null;
+            this.outgoing.Clear();
             this.awaitingLocalRoll = false;
             this.awaitingLocalDart = false;
             return;
         }
 
-        var command = this.pendingChat;
-        this.pendingChat = null;
+        var command = this.outgoing[0].Command;
+        this.outgoing.RemoveAt(0);
         GameChat.SendCommand(command);
         this.commandReadyAt = Environment.TickCount64 + 1200;
     }
@@ -886,7 +1036,7 @@ public sealed class BowlingWindow : Window, IDisposable
     private void ApplyManualDart(BowlerLane lane, int roll)
     {
         this.awaitingLocalDart = false;
-        this.pendingChat = null;
+        this.outgoing.Clear();
         if (!this.lanes.TryApplyDart(lane, roll, out var hit, out var turnOver, out var error))
         {
             this.status = error ?? "Could not mark that dart.";
@@ -909,7 +1059,7 @@ public sealed class BowlingWindow : Window, IDisposable
     private void SkipDartAfk(BowlerLane lane)
     {
         this.awaitingLocalDart = false;
-        this.pendingChat = null;
+        this.outgoing.Clear();
         lane.Clock.SkipRestOfTurn();
         lane.SittingOut = true;
         var next = this.lanes.WhoseDartTurn();
@@ -921,7 +1071,7 @@ public sealed class BowlingWindow : Window, IDisposable
     private void ApplyManualThrow(BowlerLane lane, int pins)
     {
         this.awaitingLocalRoll = false;
-        this.pendingChat = null;
+        this.outgoing.Clear();
         if (!this.lanes.TryApplyRoll(lane, pins, out var counted, out var overshot, out var error))
         {
             this.status = error ?? "Could not mark that throw.";
@@ -944,7 +1094,7 @@ public sealed class BowlingWindow : Window, IDisposable
     private void SkipAfk(BowlerLane lane)
     {
         this.awaitingLocalRoll = false;
-        this.pendingChat = null;
+        this.outgoing.Clear();
         if (lane.Game.IsFrameInProgress)
             lane.Game.TryPassFrame(out _, out _);
 
@@ -958,7 +1108,7 @@ public sealed class BowlingWindow : Window, IDisposable
     private void PassOpenFrame(BowlerLane lane)
     {
         this.awaitingLocalRoll = false;
-        this.pendingChat = null;
+        this.outgoing.Clear();
         if (!lane.Game.TryPassFrame(out var gutters, out var error))
         {
             this.status = error ?? "Could not pass that frame.";
@@ -988,7 +1138,7 @@ public sealed class BowlingWindow : Window, IDisposable
         }
 
         this.awaitingLocalRoll = false;
-        this.pendingChat = null;
+        this.outgoing.Clear();
         this.status = $"Undid the last ball on {lane.Name}'s lane.";
         if (lane.Game.Rolls.Count == 0)
             this.lastScoredId = null;
@@ -1272,5 +1422,6 @@ public sealed class BowlingWindow : Window, IDisposable
     public void Dispose()
     {
         this.labelFont.Dispose();
+        this.tabFont.Dispose();
     }
 }
