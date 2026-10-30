@@ -234,6 +234,7 @@ public sealed class BowlingWindow : Window, IDisposable
     private readonly ISharedImmediateTexture? menuFood;
     private readonly ISharedImmediateTexture? menuDrink;
     private const string CarrdUrl = "https://neoncelestial.carrd.co/";
+    private const string BilliardsUrl = "https://bloob.io/8ballpool";
 
     public BowlingWindow(
         IDalamudPluginInterface pluginInterface,
@@ -316,7 +317,7 @@ public sealed class BowlingWindow : Window, IDisposable
         NeonTheme.BrandHeader(this.logo?.GetWrapOrEmpty(), this.labelFont);
 
         this.tabFont.Push();
-        this.houseTab = NeonTheme.GlowTabBar(["BOWLING", "DARTS", "MENU", "CARRD"], this.houseTab);
+        this.houseTab = NeonTheme.GlowTabBar(["BOWLING", "DARTS", "BILLIARDS", "MENU", "CARRD"], this.houseTab);
         this.tabFont.Pop();
 
         switch (this.houseTab)
@@ -328,9 +329,12 @@ public sealed class BowlingWindow : Window, IDisposable
                     this.DrawVenueLock("then throw.");
                 break;
             case 2:
-                this.DrawMenuTab();
+                this.DrawBilliardsTab();
                 break;
             case 3:
+                this.DrawMenuTab();
+                break;
+            case 4:
                 this.DrawCarrdTab();
                 break;
             default:
@@ -605,6 +609,42 @@ public sealed class BowlingWindow : Window, IDisposable
         ImGui.TextUnformatted(lead);
         ImGui.SameLine(0, 0);
         ImGui.TextWrapped(rest);
+    }
+
+    private void DrawBilliardsTab()
+    {
+        this.labelFont.Push();
+        ImGui.TextColored(NeonTheme.Gold, "NEON CELESTIAL LANES  ·  BILLIARDS");
+        ImGui.TextColored(NeonTheme.Muted, "Standard 8-ball. Play on the site or your Aetherphone, hang at the in-game table.");
+        this.labelFont.Pop();
+        ImGui.Dummy(new Vector2(0, 8));
+
+        ImGui.TextColored(NeonTheme.Cyan, "How it works");
+        ImGui.TextWrapped("When you're ready to play, open bloob.io/8ballpool. One player can create a room and share the code, or you can join a public match together. Once you're connected, that's your table. Play your turns on the website — or on your Aetherphone if you have one — while roleplaying at the in-game pool table for the full immersive vibe.");
+        ImGui.Dummy(new Vector2(0, 8));
+
+        ImGui.TextColored(NeonTheme.Cyan, "House rules");
+        ImGui.BulletText("Standard 8-Ball rules apply.");
+        ImGui.BulletText("Call your shots if you're feeling fancy.");
+        ImGui.BulletText("No rage quitting (we will absolutely notice).");
+        ImGui.BulletText("Winner gets bragging rights until someone beats them.");
+        ImGui.Dummy(new Vector2(0, 4));
+        ImGui.TextColored(NeonTheme.Ice, "Simple. Smooth. Slightly competitive.");
+        ImGui.Dummy(new Vector2(0, 8));
+
+        ImGui.TextColored(NeonTheme.Cyan, "Rentals");
+        ImGui.BulletText("Single match — 2 players, one full 8-ball game.");
+        ImGui.BulletText("Private table — reserve ahead via Discord, 2-hour block during open hours.");
+        ImGui.Dummy(new Vector2(0, 12));
+
+        this.labelFont.Push();
+        ImGui.PushStyleColor(ImGuiCol.Text, NeonTheme.Ice);
+        if (NeonTheme.GlowButton("  OPEN TABLE  ", NeonTheme.Gold))
+            Util.OpenLink(BilliardsUrl);
+        ImGui.PopStyleColor();
+        this.labelFont.Pop();
+        ImGui.Dummy(new Vector2(0, 8));
+        ImGui.TextColored(NeonTheme.Lavender, BilliardsUrl);
     }
 
     private void DrawMenuTab()
