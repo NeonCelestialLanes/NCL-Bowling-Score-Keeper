@@ -189,6 +189,7 @@ public sealed class BowlingWindow : Window, IDisposable
     private readonly IPartyList partyList;
     private readonly IObjectTable objectTable;
     private readonly IPlayerState playerState;
+    private readonly LifestreamTravel lifestream;
     private readonly IFontHandle labelFont;
     private readonly ISharedImmediateTexture? logo;
     private readonly PartyLanes lanes = new();
@@ -213,6 +214,7 @@ public sealed class BowlingWindow : Window, IDisposable
         this.partyList = partyList;
         this.objectTable = objectTable;
         this.playerState = playerState;
+        this.lifestream = new LifestreamTravel(pluginInterface);
         var dir = pluginInterface.AssemblyLocation.DirectoryName ?? string.Empty;
         var fontPath = Path.Combine(dir, "Assets", "LuckiestGuy-Regular.ttf");
         var logoPath = Path.Combine(dir, "Assets", "ncl-logo.png");
@@ -236,6 +238,9 @@ public sealed class BowlingWindow : Window, IDisposable
     public bool HandleChat(string text, string? sender = null)
     {
         this.SyncRoster();
+        if (!NclVenue.IsAt(this.playerState))
+            return false;
+
         if (IsCommandRestricted(text))
         {
             this.awaitingLocalRoll = false;
@@ -307,6 +312,31 @@ public sealed class BowlingWindow : Window, IDisposable
         NeonTheme.Push();
         NeonTheme.DrawBackdrop();
         NeonTheme.BrandHeader(this.logo?.GetWrapOrEmpty(), this.labelFont);
+
+        if (!NclVenue.IsAt(this.playerState))
+        {
+            this.pendingChat = null;
+            this.awaitingLocalRoll = false;
+            this.labelFont.Push();
+            ImGui.TextColored(NeonTheme.Magenta, "This scorecard only works at Neon Celestial Lanes.");
+            ImGui.TextColored(NeonTheme.Gold, NclVenue.Address);
+            ImGui.TextColored(NeonTheme.Muted, "Step inside the house — yard or lanes — then bowl.");
+            ImGui.Dummy(new Vector2(0, 8));
+            ImGui.PushStyleColor(ImGuiCol.Text, NeonTheme.Ice);
+            if (NeonTheme.GlowButton("  GO TO NCL  ", NeonTheme.Cyan))
+                this.lifestream.TryGoToNcl(out this.status);
+            ImGui.SameLine();
+            if (NeonTheme.GlowButton("  CARRD  ", NeonTheme.Gold))
+                Util.OpenLink("https://neoncelestial.carrd.co/");
+            ImGui.PopStyleColor();
+            this.labelFont.Pop();
+            NeonTheme.StatusBar(
+                this.status.StartsWith("Walk up", StringComparison.Ordinal)
+                    ? "Come bowl at NCL. " + NclVenue.Address + "."
+                    : this.status);
+            NeonTheme.Pop();
+            return;
+        }
 
         var local = this.LocalLane();
         var onApproach = this.lanes.WhoseTurn();
@@ -423,6 +453,13 @@ public sealed class BowlingWindow : Window, IDisposable
     {
         if (this.pendingChat is null || Environment.TickCount64 < this.pendingChatAt)
             return;
+
+        if (!NclVenue.IsAt(this.playerState))
+        {
+            this.pendingChat = null;
+            this.awaitingLocalRoll = false;
+            return;
+        }
 
         var command = this.pendingChat;
         this.pendingChat = null;

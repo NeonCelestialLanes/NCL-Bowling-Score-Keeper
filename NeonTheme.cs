@@ -143,7 +143,7 @@ internal static class NeonTheme
     {
         var start = ImGui.GetCursorScreenPos();
         var width = ImGui.GetContentRegionAvail().X;
-        const float height = 92f;
+        const float height = 118f;
         var end = start + new Vector2(width, height);
         var dl = ImGui.GetWindowDrawList();
         var time = (float)ImGui.GetTime();
@@ -176,40 +176,26 @@ internal static class NeonTheme
         dl.AddRect(start, end, Col(Cyan), 14f, ImDrawFlags.None, 1.9f);
         dl.AddRect(start + new Vector2(2.6f, 2.6f), end - new Vector2(2.6f, 2.6f), Col(WithAlpha(Magenta, 0.45f)), 12f, ImDrawFlags.None, 1.3f);
 
-        var logoW = 132f;
-        var logoH = 74f;
+        var logoH = 88f;
+        var logoW = 157f;
         if (logo is not null && logo.Handle != nint.Zero && logo.Width > 0 && logo.Height > 0)
-        {
-            logoH = 74f;
             logoW = logoH * logo.Width / logo.Height;
-        }
 
+        var logoX = start.X + MathF.Max(12f, (width - logoW - 56f) * 0.5f);
+        var logoY = start.Y + 6f;
         if (logo is not null && logo.Handle != nint.Zero)
         {
-            ImGui.SetCursorScreenPos(start + new Vector2(12f, (height - logoH) * 0.5f));
+            ImGui.SetCursorScreenPos(new Vector2(logoX, logoY));
             ImGui.Image(logo.Handle, new Vector2(logoW, logoH));
         }
 
-        DrawBowlingBall(dl, new Vector2(end.X - 48f, start.Y + 38f), 16f, time);
+        DrawBowlingBall(dl, new Vector2(end.X - 48f, start.Y + 42f), 16f, time);
+        DrawSpark(dl, new Vector2(logoX - 8f, logoY + 18f), 5.5f, Gold);
+        DrawSpark(dl, new Vector2(logoX + logoW + 6f, logoY + 12f), 4.2f, Ice);
 
-        const string title = "NEON CELESTIAL LANES";
         const string sub = "GOBLIN  ·  W23 P49  ·  OPEN BOWL";
-        var titlePos = start + new Vector2(20f + logoW, 16f);
-        float titleWidth;
-        if (labelFont is not null)
-        {
-            using (labelFont.Push())
-                titleWidth = DrawGlowText(dl, titlePos, title, Cyan, Magenta);
-        }
-        else
-        {
-            titleWidth = DrawGlowText(dl, titlePos, title, Cyan, Magenta);
-        }
-
-        DrawSpark(dl, titlePos + new Vector2(titleWidth + 14f, 8f), 6.5f, Gold);
-        DrawSpark(dl, titlePos + new Vector2(titleWidth + 26f, 2f), 3.2f, Ice);
-
-        var subPos = start + new Vector2(20f + logoW, 46f);
+        var subSize = ImGui.CalcTextSize(sub);
+        var subPos = new Vector2(start.X + ((width - subSize.X) * 0.5f), start.Y + height - 28f);
         if (labelFont is not null)
         {
             using (labelFont.Push())
