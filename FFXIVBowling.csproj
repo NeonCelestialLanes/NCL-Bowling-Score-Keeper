@@ -2,7 +2,7 @@
   <PropertyGroup>
     <AssemblyName>NCLBowlingScore</AssemblyName>
     <Product>NCL Bowling Score</Product>
-    <Version>1.0.2.0</Version>
+    <Version>1.0.3.0</Version>
     <Description>NCL Bowling Score — keep score at Neon Celestial Lanes.</Description>
     <PackageProjectUrl>https://github.com/NeonCelestialLanes/NCL-Bowling-Score-Keeper</PackageProjectUrl>
     <IsPackable>false</IsPackable>

@@ -10,6 +10,7 @@ using Dalamud.Interface.Windowing;
 using Dalamud.IoC;
 using Dalamud.Plugin;
 using Dalamud.Plugin.Services;
+using Dalamud.Utility;
 using Dalamud.Bindings.ImGui;
 using System.Numerics;
 using Lumina.Text.ReadOnly;
@@ -358,6 +359,10 @@ public sealed class BowlingWindow : Window, IDisposable
             this.commandReadyAt = 0;
             this.status = "Fresh lanes. Don't choke.";
         }
+
+        ImGui.SameLine();
+        if (NeonTheme.GlowButton("  CARRD  ", NeonTheme.Gold))
+            Util.OpenLink("https://neoncelestial.carrd.co/");
 
         ImGui.PopStyleColor();
         this.labelFont.Pop();
