@@ -4,18 +4,20 @@ using FFXIVClientStructs.FFXIV.Client.Game;
 namespace FFXIVBowling;
 
 /// <summary>
-/// Neon Celestial Lanes: Goblin, Lavender Beds, Ward 23 Plot 49.
+/// Neon Celestial Lanes: Goblin, Lavender Beds, Ward 17 Plot 21.
 /// Housing ward/plot from the game are 0-indexed.
+/// Lifestream: /li goblin lb w17 p21
 /// </summary>
 internal static class NclVenue
 {
     public const string WorldName = "Goblin";
     public const string DistrictName = "Lavender Beds";
-    public const int Ward = 23;
-    public const int Plot = 49;
+    public const int Ward = 17;
+    public const int Plot = 21;
     public const ushort GoblinWorldId = 23;
     public const uint LavenderBedsTerritory = 340;
-    public const string Address = "Goblin · Lavender Beds · Ward 23 Plot 49";
+    public const string Address = "Goblin · Lavender Beds · Ward 17 Plot 21";
+    public const string LifestreamCommand = "goblin lb w17 p21";
 
     public static bool IsAt(IPlayerState playerState)
     {

@@ -5,20 +5,18 @@ using Dalamud.Plugin.Ipc.Exceptions;
 namespace FFXIVBowling;
 
 /// <summary>
-/// Talks to NightmareXIV Lifestream over IPC to walk people to NCL.
-/// Tuple layout matches Lifestream's AddressBookEntryTuple.
-/// City 2 = Gridania / Lavender Beds. PropertyType 0 = house.
+/// Talks to NightmareXIV Lifestream over IPC. Runs the same as /li goblin lb w17 p21.
 /// </summary>
 internal sealed class LifestreamTravel
 {
     private readonly IDalamudPluginInterface pluginInterface;
-    private readonly ICallGateSubscriber<(string Name, int World, int City, int Ward, int PropertyType, int Plot, int Apartment, bool ApartmentSubdivision, bool AliasEnabled, string Alias), object> go;
+    private readonly ICallGateSubscriber<string, object> execute;
     private readonly ICallGateSubscriber<bool> busy;
 
     public LifestreamTravel(IDalamudPluginInterface pluginInterface)
     {
         this.pluginInterface = pluginInterface;
-        this.go = pluginInterface.GetIpcSubscriber<(string, int, int, int, int, int, int, bool, bool, string), object>("Lifestream.GoToHousingAddress");
+        this.execute = pluginInterface.GetIpcSubscriber<string, object>("Lifestream.ExecuteCommand");
         this.busy = pluginInterface.GetIpcSubscriber<bool>("Lifestream.IsBusy");
     }
 
@@ -49,17 +47,7 @@ internal sealed class LifestreamTravel
                 return false;
             }
 
-            this.go.InvokeAction((
-                "Neon Celestial Lanes",
-                NclVenue.GoblinWorldId,
-                2,
-                NclVenue.Ward,
-                0,
-                NclVenue.Plot,
-                1,
-                false,
-                false,
-                string.Empty));
+            this.execute.InvokeAction(NclVenue.LifestreamCommand);
             message = "Lifestream's taking you to NCL. Hang on.";
             return true;
         }

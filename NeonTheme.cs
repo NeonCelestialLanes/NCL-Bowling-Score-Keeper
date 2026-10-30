@@ -193,7 +193,7 @@ internal static class NeonTheme
         DrawSpark(dl, new Vector2(logoX - 8f, logoY + 18f), 5.5f, Gold);
         DrawSpark(dl, new Vector2(logoX + logoW + 6f, logoY + 12f), 4.2f, Ice);
 
-        const string sub = "GOBLIN  ·  W23 P49  ·  OPEN BOWL";
+        const string sub = "GOBLIN  ·  LB W17 P21  ·  OPEN BOWL";
         var subSize = ImGui.CalcTextSize(sub);
         var subPos = new Vector2(start.X + ((width - subSize.X) * 0.5f), start.Y + height - 28f);
         if (labelFont is not null)
