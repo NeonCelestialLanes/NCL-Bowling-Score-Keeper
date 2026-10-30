@@ -6,6 +6,7 @@ using Dalamud.Game.Command;
 using System.IO;
 using Dalamud.Interface.ManagedFontAtlas;
 using Dalamud.Interface.Textures;
+using Dalamud.Interface.Textures.TextureWraps;
 using Dalamud.Interface.Windowing;
 using Dalamud.IoC;
 using Dalamud.Plugin;
@@ -111,23 +112,25 @@ public static class RollParser
     // Party /dice party 11, seen by everyone in the party:
     //   sender "Mikh Aliapoh ★"  body "Random! (1-11) 4"
     private static readonly Regex WorldRoll = new(
-        @"(?:(?:Random|Dice)!?\s*)?(?:(?<you>You)\s+roll\s+a|(?<name>.+?)\s+rolls\s+a)\D*(?<pins>\d+)\s*\(\s*(?:out of\s*\d+|0\s*[-–]\s*\d+)\s*\)",
+        @"(?:(?:Random|Dice)!?\s*)?(?:(?<you>You)\s+roll\s+a|(?<name>.+?)\s+rolls\s+a)\D*(?<pins>\d+)\s*\(\s*(?:out of\s*(?<die>\d+)|0\s*[-–]\s*(?<die2>\d+))\s*\)",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     private static readonly Regex PartyDice = new(
-        @"(?:\((?<paren>[^)]+)\)\s*)?(?:Random|Dice)!?\s*\(\s*\d+\s*[-–]\s*\d+\s*\)\D*(?<pins>\d+)",
+        @"(?:\((?<paren>[^)]+)\)\s*)?(?:Random|Dice)!?\s*\(\s*\d+\s*[-–]\s*(?<die>\d+)\s*\)\D*(?<pins>\d+)",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-    public static bool TryParse(string message, string? sender, out string? rolledName, out bool isYou, out int pins)
+    public static bool TryParse(string message, string? sender, out string? rolledName, out bool isYou, out int pins, out int dieSides)
     {
         rolledName = null;
         isYou = false;
         pins = 0;
+        dieSides = 0;
 
         var haystack = string.IsNullOrWhiteSpace(sender) ? message : $"{sender} {message}";
         var match = WorldRoll.Match(message);
         if (match.Success && TryReadPins(match.Groups["pins"].Value, out pins))
         {
+            dieSides = ReadDie(match);
             isYou = match.Groups["you"].Success;
             if (!isYou)
                 rolledName = match.Groups["name"].Value.Trim();
@@ -142,12 +145,22 @@ public static class RollParser
         if (!match.Success || !TryReadPins(match.Groups["pins"].Value, out pins))
             return false;
 
+        dieSides = ReadDie(match);
         if (match.Groups["paren"].Success)
             rolledName = match.Groups["paren"].Value.Trim();
         else if (!string.IsNullOrWhiteSpace(sender))
             rolledName = sender.Trim();
 
         return true;
+    }
+
+    private static int ReadDie(Match match)
+    {
+        if (match.Groups["die"].Success && int.TryParse(match.Groups["die"].Value, out var die) && die > 0)
+            return die;
+        if (match.Groups["die2"].Success && int.TryParse(match.Groups["die2"].Value, out die) && die > 0)
+            return die;
+        return 0;
     }
 
     private static bool TryReadPins(string raw, out int pins)
@@ -204,6 +217,15 @@ public sealed class BowlingWindow : Window, IDisposable
     private long commandReadyAt;
     private int markPins;
     private ulong? lastScoredId;
+    private bool awaitingLocalDart;
+    private bool dartClickArmed = true;
+    private string lastDartKey = string.Empty;
+    private long lastDartTicks;
+    private int markDart = 2;
+    private ulong? lastDartId;
+    private readonly ISharedImmediateTexture? menuFood;
+    private readonly ISharedImmediateTexture? menuDrink;
+    private const string CarrdUrl = "https://neoncelestial.carrd.co/";
 
     public BowlingWindow(
         IDalamudPluginInterface pluginInterface,
@@ -220,6 +242,8 @@ public sealed class BowlingWindow : Window, IDisposable
         var dir = pluginInterface.AssemblyLocation.DirectoryName ?? string.Empty;
         var fontPath = Path.Combine(dir, "Assets", "LuckiestGuy-Regular.ttf");
         var logoPath = Path.Combine(dir, "Assets", "ncl-logo.png");
+        var foodPath = Path.Combine(dir, "Assets", "menu-food.jpg");
+        var drinkPath = Path.Combine(dir, "Assets", "menu-drink.jpg");
         this.labelFont = pluginInterface.UiBuilder.FontAtlas.NewDelegateFontHandle(e => e.OnPreBuild(toolkit =>
         {
             if (File.Exists(fontPath))
@@ -228,12 +252,14 @@ public sealed class BowlingWindow : Window, IDisposable
                 toolkit.AddDalamudDefaultFont(17);
         }));
         this.logo = File.Exists(logoPath) ? textureProvider.GetFromFile(logoPath) : null;
-        this.Size = new Vector2(780, 520);
+        this.menuFood = File.Exists(foodPath) ? textureProvider.GetFromFile(foodPath) : null;
+        this.menuDrink = File.Exists(drinkPath) ? textureProvider.GetFromFile(drinkPath) : null;
+        this.Size = new Vector2(860, 620);
         this.SizeCondition = ImGuiCond.FirstUseEver;
         this.SizeConstraints = new WindowSizeConstraints
         {
-            MinimumSize = new Vector2(700, 340),
-            MaximumSize = new Vector2(1200, 900)
+            MinimumSize = new Vector2(720, 380),
+            MaximumSize = new Vector2(1400, 980)
         };
     }
 
@@ -246,15 +272,400 @@ public sealed class BowlingWindow : Window, IDisposable
         if (IsCommandRestricted(text))
         {
             this.awaitingLocalRoll = false;
+            this.awaitingLocalDart = false;
             this.pendingChat = null;
             this.commandReadyAt = Environment.TickCount64 + 1500;
             this.status = "The game blocked that throw. Wait it out, then roll again.";
             return true;
         }
 
-        if (!RollParser.TryParse(text, sender, out var rolledName, out var isYou, out var pins))
+        if (!RollParser.TryParse(text, sender, out var rolledName, out var isYou, out var pins, out var dieSides))
             return false;
 
+        if (dieSides == 10 || (dieSides == 0 && this.awaitingLocalDart))
+            return this.ApplyHeardDart(rolledName, sender, text, isYou, pins);
+
+        return this.ApplyHeardBowl(rolledName, sender, text, isYou, pins);
+    }
+
+    public override void Draw()
+    {
+        this.SyncRoster();
+        this.FlushPendingChat();
+
+        NeonTheme.Push();
+        NeonTheme.DrawBackdrop();
+        NeonTheme.BrandHeader(this.logo?.GetWrapOrEmpty(), this.labelFont);
+
+        if (ImGui.BeginTabBar("ncl_house_tabs", ImGuiTabBarFlags.FittingPolicyScroll))
+        {
+            if (ImGui.BeginTabItem("  BOWLING  "))
+            {
+                if (NclVenue.IsAt(this.playerState))
+                    this.DrawBowlingTab();
+                else
+                    this.DrawVenueLock("then bowl.");
+                ImGui.EndTabItem();
+            }
+
+            if (ImGui.BeginTabItem("  DARTS  "))
+            {
+                if (NclVenue.IsAt(this.playerState))
+                    this.DrawDartsTab();
+                else
+                    this.DrawVenueLock("then throw.");
+                ImGui.EndTabItem();
+            }
+
+            if (ImGui.BeginTabItem("  MENU  "))
+            {
+                this.DrawMenuTab();
+                ImGui.EndTabItem();
+            }
+
+            if (ImGui.BeginTabItem("  CARRD  "))
+            {
+                this.DrawCarrdTab();
+                ImGui.EndTabItem();
+            }
+
+            ImGui.EndTabBar();
+        }
+
+        NeonTheme.StatusBar(this.status);
+        NeonTheme.Pop();
+    }
+
+    private void DrawVenueLock(string verb)
+    {
+        this.pendingChat = null;
+        this.awaitingLocalRoll = false;
+        this.awaitingLocalDart = false;
+        this.labelFont.Push();
+        ImGui.TextColored(NeonTheme.Magenta, "Scoring only works at Neon Celestial Lanes.");
+        ImGui.TextColored(NeonTheme.Gold, NclVenue.Address);
+        ImGui.TextColored(NeonTheme.Muted, $"Step inside the house — yard or lanes — {verb}");
+        ImGui.Dummy(new Vector2(0, 8));
+        ImGui.PushStyleColor(ImGuiCol.Text, NeonTheme.Ice);
+        if (NeonTheme.GlowButton("  GO TO NCL  ", NeonTheme.Cyan))
+            this.lifestream.TryGoToNcl(out this.status);
+        ImGui.PopStyleColor();
+        this.labelFont.Pop();
+        if (this.status.StartsWith("Walk up", StringComparison.Ordinal))
+            this.status = "Come bowl at NCL. " + NclVenue.Address + ".";
+    }
+
+    private void DrawBowlingTab()
+    {
+        var local = this.LocalLane();
+        var onApproach = this.lanes.WhoseTurn();
+        var localDone = local?.Game.IsComplete == true;
+        var localTurn = local is not null && onApproach is not null && ReferenceEquals(onApproach, local);
+        if (!ImGui.IsMouseDown(ImGuiMouseButton.Left))
+            this.rollClickArmed = true;
+
+        var cooldownMs = this.commandReadyAt - Environment.TickCount64;
+        var onCooldown = cooldownMs > 0;
+        var canRoll = localTurn && !localDone && !this.awaitingLocalRoll && this.rollClickArmed && !onCooldown;
+
+        ImGui.TextColored(NeonTheme.Cyan, this.RosterHeadline());
+        if (onApproach is not null)
+            ImGui.TextColored(NeonTheme.Gold, $"On the approach: {onApproach.Name}");
+        else if (this.lanes.PresentCount > 0)
+            ImGui.TextColored(NeonTheme.Magenta, "That's the game. Bragging rights until someone beats you.");
+
+        this.labelFont.Push();
+        ImGui.PushStyleColor(ImGuiCol.Text, NeonTheme.Ice);
+        var rollColor = this.awaitingLocalRoll || onCooldown ? NeonTheme.Gold : canRoll ? NeonTheme.Cyan : NeonTheme.Muted;
+        var rollLabel = this.awaitingLocalRoll
+            ? "  WAITING FOR ROLL…  ##rollball"
+            : onCooldown
+                ? $"  WAIT {cooldownMs / 1000f:0.0}s  ##rollball"
+                : localDone
+                    ? "  GAME OVER  ##rollball"
+                    : !localTurn
+                        ? "  WAIT YOUR TURN  ##rollball"
+                        : "  ROLL BALL  ##rollball";
+        ImGui.BeginDisabled(!canRoll);
+        var clickedRoll = NeonTheme.GlowButton(rollLabel, rollColor);
+        ImGui.EndDisabled();
+        if (clickedRoll && canRoll)
+        {
+            this.rollClickArmed = false;
+            this.awaitingLocalRoll = true;
+            this.pendingChat = this.RollCommand();
+            this.pendingChatAt = Environment.TickCount64 + Random.Shared.Next(100, 301);
+            this.status = $"Bowling… {local!.Game.RemainingPins} pin(s) still standing. Make it dramatic.";
+        }
+
+        ImGui.SameLine();
+        if (NeonTheme.GlowButton("  NEW GAME  ", NeonTheme.Magenta))
+        {
+            this.lanes.ResetVisible();
+            this.awaitingLocalRoll = false;
+            this.rollClickArmed = true;
+            this.pendingChat = null;
+            this.commandReadyAt = 0;
+            this.lastScoredId = null;
+            this.status = "Fresh lanes. Don't choke.";
+        }
+
+        ImGui.PopStyleColor();
+        this.labelFont.Pop();
+
+        this.DrawLaneFixes(onApproach);
+        NeonTheme.GlowSeparator();
+        this.DrawGuestRow();
+        NeonTheme.GlowSeparator();
+        this.DrawLaneList(onApproach);
+    }
+
+    private void DrawDartsTab()
+    {
+        var local = this.LocalLane();
+        var onOche = this.lanes.WhoseDartTurn();
+        var localDone = local?.Clock.IsComplete == true;
+        var localTurn = local is not null && onOche is not null && ReferenceEquals(onOche, local);
+        if (!ImGui.IsMouseDown(ImGuiMouseButton.Left))
+            this.dartClickArmed = true;
+
+        var cooldownMs = this.commandReadyAt - Environment.TickCount64;
+        var onCooldown = cooldownMs > 0;
+        var canThrow = localTurn && !localDone && !this.awaitingLocalDart && this.dartClickArmed && !onCooldown;
+
+        ImGui.TextColored(NeonTheme.Cyan, "AROUND THE CLOCK  ·  1–20, then bullseye  ·  3 darts each turn");
+        ImGui.TextColored(NeonTheme.Muted, "Even 2/4/6/8 hits a number. Odd 3/5/7/9 misses. 1 and 10 only count on bullseye.");
+        if (onOche is not null)
+            ImGui.TextColored(NeonTheme.Gold, $"On the oche: {onOche.Name}  ·  aiming {onOche.Clock.AimLabel}  ·  dart {onOche.Clock.DartsThisTurn + 1}/3");
+        else if (this.lanes.PresentCount > 0)
+            ImGui.TextColored(NeonTheme.Magenta, "Clock's done. First one to bullseye keeps the bragging rights.");
+
+        this.labelFont.Push();
+        ImGui.PushStyleColor(ImGuiCol.Text, NeonTheme.Ice);
+        var throwColor = this.awaitingLocalDart || onCooldown ? NeonTheme.Gold : canThrow ? NeonTheme.Cyan : NeonTheme.Muted;
+        var throwLabel = this.awaitingLocalDart
+            ? "  WAITING FOR DART…  ##throwdart"
+            : onCooldown
+                ? $"  WAIT {cooldownMs / 1000f:0.0}s  ##throwdart"
+                : localDone
+                    ? "  CLOCK DONE  ##throwdart"
+                    : !localTurn
+                        ? "  WAIT YOUR TURN  ##throwdart"
+                        : "  THROW DART  ##throwdart";
+        ImGui.BeginDisabled(!canThrow);
+        var clickedThrow = NeonTheme.GlowButton(throwLabel, throwColor);
+        ImGui.EndDisabled();
+        if (clickedThrow && canThrow)
+        {
+            this.dartClickArmed = false;
+            this.awaitingLocalDart = true;
+            this.pendingChat = this.DartCommand();
+            this.pendingChatAt = Environment.TickCount64 + Random.Shared.Next(100, 301);
+            this.status = $"Darts… aiming {local!.Clock.AimLabel}. Make it stick.";
+        }
+
+        ImGui.SameLine();
+        if (NeonTheme.GlowButton("  NEW CLOCK  ", NeonTheme.Magenta))
+        {
+            this.lanes.ResetClocks();
+            this.awaitingLocalDart = false;
+            this.dartClickArmed = true;
+            this.pendingChat = null;
+            this.commandReadyAt = 0;
+            this.lastDartId = null;
+            this.status = "Fresh clocks. Start at 1.";
+        }
+
+        ImGui.PopStyleColor();
+        this.labelFont.Pop();
+
+        this.DrawDartFixes(onOche);
+        NeonTheme.GlowSeparator();
+        this.DrawGuestRow();
+        NeonTheme.GlowSeparator();
+        this.DrawDartList(onOche);
+    }
+
+    private void DrawMenuTab()
+    {
+        ImGui.TextColored(NeonTheme.Cyan, "FOOD  ·  DRINK");
+        ImGui.TextColored(NeonTheme.Muted, "Straight from the NCL Carrd. Tell the bar what you want.");
+        if (!ImGui.BeginChild("ncl_menus", new Vector2(0, -8), true))
+        {
+            ImGui.EndChild();
+            return;
+        }
+
+        var food = this.menuFood?.GetWrapOrEmpty();
+        var drink = this.menuDrink?.GetWrapOrEmpty();
+        var avail = ImGui.GetContentRegionAvail();
+        var gap = 14f;
+        var colW = MathF.Max(180f, (avail.X - gap) * 0.5f);
+        this.DrawMenuPage(food, colW);
+        ImGui.SameLine(0, gap);
+        this.DrawMenuPage(drink, colW);
+        ImGui.EndChild();
+    }
+
+    private void DrawMenuPage(IDalamudTextureWrap? wrap, float width)
+    {
+        if (wrap is null || wrap.Handle == nint.Zero || wrap.Width <= 0)
+        {
+            ImGui.BeginChild("menu_missing" + width, new Vector2(width, 240), true);
+            ImGui.TextColored(NeonTheme.Muted, "Menu art didn't load. Use the Carrd tab.");
+            ImGui.EndChild();
+            return;
+        }
+
+        var height = width * wrap.Height / wrap.Width;
+        ImGui.Image(wrap.Handle, new Vector2(width, height));
+    }
+
+    private void DrawCarrdTab()
+    {
+        this.labelFont.Push();
+        ImGui.TextColored(NeonTheme.Magenta, "NEON CELESTIAL LANES");
+        ImGui.TextColored(NeonTheme.Gold, NclVenue.Address);
+        ImGui.TextColored(NeonTheme.Muted, "Bowling, billiards, darts, menu, gallery — the whole house lives on Carrd.");
+        ImGui.Dummy(new Vector2(0, 12));
+        ImGui.PushStyleColor(ImGuiCol.Text, NeonTheme.Ice);
+        if (NeonTheme.GlowButton("  OPEN CARRD  ", NeonTheme.Gold))
+            Util.OpenLink(CarrdUrl);
+        ImGui.SameLine();
+        if (NeonTheme.GlowButton("  GO TO NCL  ", NeonTheme.Cyan))
+            this.lifestream.TryGoToNcl(out this.status);
+        ImGui.PopStyleColor();
+        this.labelFont.Pop();
+        ImGui.Dummy(new Vector2(0, 8));
+        ImGui.TextColored(NeonTheme.Lavender, CarrdUrl);
+    }
+
+    private void DrawGuestRow()
+    {
+        this.labelFont.Push();
+        ImGui.TextColored(NeonTheme.Cyan, "ADD A PLAYER");
+        ImGui.SetNextItemWidth(280);
+        var addGuest = ImGui.InputTextWithHint("##guest_name", "First Last", ref this.guestName, 40, ImGuiInputTextFlags.EnterReturnsTrue);
+        ImGui.SameLine();
+        if (NeonTheme.GlowButton("  ADD  ", NeonTheme.Cyan) || addGuest)
+            this.TryAddGuest();
+        this.labelFont.Pop();
+    }
+
+    private void DrawLaneList(BowlerLane? onApproach)
+    {
+        if (!ImGui.BeginChild("neon_lanes", new Vector2(0, -8), true))
+        {
+            ImGui.EndChild();
+            return;
+        }
+
+        ulong? removeId = null;
+        string? removedName = null;
+        foreach (var lane in this.lanes.Visible)
+        {
+            if (this.DrawLane(lane, onApproach, out var drop) && drop)
+            {
+                removeId = lane.ContentId;
+                removedName = lane.Name;
+                break;
+            }
+        }
+
+        if (removeId is ulong id && removedName is not null)
+        {
+            this.lanes.TryRemoveGuest(id);
+            this.status = $"{removedName} left the lanes.";
+        }
+
+        ImGui.EndChild();
+    }
+
+    private void DrawDartList(BowlerLane? onOche)
+    {
+        if (!ImGui.BeginChild("neon_clocks", new Vector2(0, -8), true))
+        {
+            ImGui.EndChild();
+            return;
+        }
+
+        ulong? removeId = null;
+        string? removedName = null;
+        foreach (var lane in this.lanes.Visible)
+        {
+            if (this.DrawDartLane(lane, onOche, out var drop) && drop)
+            {
+                removeId = lane.ContentId;
+                removedName = lane.Name;
+                break;
+            }
+        }
+
+        if (removeId is ulong id && removedName is not null)
+        {
+            this.lanes.TryRemoveGuest(id);
+            this.status = $"{removedName} left the oche.";
+        }
+
+        ImGui.EndChild();
+    }
+
+    private void SyncRoster() =>
+        this.lanes.Sync(this.partyList, this.objectTable.LocalPlayer, this.playerState.ContentId);
+
+    private BowlerLane? LocalLane()
+    {
+        foreach (var lane in this.lanes.Visible)
+        {
+            if (lane.IsLocal)
+                return lane;
+        }
+
+        return null;
+    }
+
+    private void FlushPendingChat()
+    {
+        if (this.pendingChat is null || Environment.TickCount64 < this.pendingChatAt)
+            return;
+
+        if (!NclVenue.IsAt(this.playerState))
+        {
+            this.pendingChat = null;
+            this.awaitingLocalRoll = false;
+            this.awaitingLocalDart = false;
+            return;
+        }
+
+        var command = this.pendingChat;
+        this.pendingChat = null;
+        GameChat.SendCommand(command);
+        this.commandReadyAt = Environment.TickCount64 + 1200;
+    }
+
+    private static bool IsCommandRestricted(string text) =>
+        text.Contains("Consecutive text command input is currently restricted", StringComparison.OrdinalIgnoreCase);
+
+    private string RollCommand()
+    {
+        // Guests may not be in the party, so those games stay on world /random.
+        // A recognized party with no guests uses /dice party so every client sees the throw.
+        if (this.lanes.HasManualGuest || this.partyList.Length <= 1)
+            return "/random 11";
+
+        return "/dice party 11";
+    }
+
+    private string DartCommand()
+    {
+        if (this.lanes.HasManualGuest || this.partyList.Length <= 1)
+            return "/random 10";
+
+        return "/dice party 10";
+    }
+
+    private bool ApplyHeardBowl(string? rolledName, string? sender, string text, bool isYou, int pins)
+    {
         var local = this.LocalLane();
         if (isYou && local is not null)
             rolledName = local.Name;
@@ -298,7 +709,7 @@ public sealed class BowlingWindow : Window, IDisposable
             return true;
         }
 
-        var who = lane!.IsLocal ? "You" : lane.Name;
+        var who = lane.IsLocal ? "You" : lane.Name;
         var extra = overshot
             ? $" Rolled {pins} with fewer pins standing. Gutter."
             : string.Empty;
@@ -314,185 +725,65 @@ public sealed class BowlingWindow : Window, IDisposable
         return true;
     }
 
-    public override void Draw()
+    private bool ApplyHeardDart(string? rolledName, string? sender, string text, bool isYou, int pins)
     {
-        this.SyncRoster();
-
-        NeonTheme.Push();
-        NeonTheme.DrawBackdrop();
-        NeonTheme.BrandHeader(this.logo?.GetWrapOrEmpty(), this.labelFont);
-
-        if (!NclVenue.IsAt(this.playerState))
-        {
-            this.pendingChat = null;
-            this.awaitingLocalRoll = false;
-            this.labelFont.Push();
-            ImGui.TextColored(NeonTheme.Magenta, "This scorecard only works at Neon Celestial Lanes.");
-            ImGui.TextColored(NeonTheme.Gold, NclVenue.Address);
-            ImGui.TextColored(NeonTheme.Muted, "Step inside the house — yard or lanes — then bowl.");
-            ImGui.Dummy(new Vector2(0, 8));
-            ImGui.PushStyleColor(ImGuiCol.Text, NeonTheme.Ice);
-            if (NeonTheme.GlowButton("  GO TO NCL  ", NeonTheme.Cyan))
-                this.lifestream.TryGoToNcl(out this.status);
-            ImGui.SameLine();
-            if (NeonTheme.GlowButton("  CARRD  ", NeonTheme.Gold))
-                Util.OpenLink("https://neoncelestial.carrd.co/");
-            ImGui.PopStyleColor();
-            this.labelFont.Pop();
-            NeonTheme.StatusBar(
-                this.status.StartsWith("Walk up", StringComparison.Ordinal)
-                    ? "Come bowl at NCL. " + NclVenue.Address + "."
-                    : this.status);
-            NeonTheme.Pop();
-            return;
-        }
-
         var local = this.LocalLane();
-        var onApproach = this.lanes.WhoseTurn();
-        var localDone = local?.Game.IsComplete == true;
-        var localTurn = local is not null && onApproach is not null && ReferenceEquals(onApproach, local);
-        if (!ImGui.IsMouseDown(ImGuiMouseButton.Left))
-            this.rollClickArmed = true;
+        if (isYou && local is not null)
+            rolledName = local.Name;
 
-        var cooldownMs = this.commandReadyAt - Environment.TickCount64;
-        var onCooldown = cooldownMs > 0;
-        var canRoll = localTurn && !localDone && !this.awaitingLocalRoll && this.rollClickArmed && !onCooldown;
+        var lane = this.lanes.FindBowler(rolledName, sender, text);
+        if (lane is null && isYou)
+            lane = local;
 
-        ImGui.TextColored(NeonTheme.Cyan, this.RosterHeadline());
-        if (onApproach is not null)
-            ImGui.TextColored(NeonTheme.Gold, $"On the approach: {onApproach.Name}");
-        else if (this.lanes.PresentCount > 0)
-            ImGui.TextColored(NeonTheme.Magenta, "That's the game. Bragging rights until someone beats you.");
-
-        this.labelFont.Push();
-        ImGui.PushStyleColor(ImGuiCol.Text, NeonTheme.Ice);
-        var rollColor = this.awaitingLocalRoll || onCooldown ? NeonTheme.Gold : canRoll ? NeonTheme.Cyan : NeonTheme.Muted;
-        var rollLabel = this.awaitingLocalRoll
-            ? "  WAITING FOR ROLL…  ##rollball"
-            : onCooldown
-                ? $"  WAIT {cooldownMs / 1000f:0.0}s  ##rollball"
-                : localDone
-                    ? "  GAME OVER  ##rollball"
-                    : !localTurn
-                        ? "  WAIT YOUR TURN  ##rollball"
-                        : "  ROLL BALL  ##rollball";
-        ImGui.BeginDisabled(!canRoll);
-        var clickedRoll = NeonTheme.GlowButton(rollLabel, rollColor);
-        ImGui.EndDisabled();
-        if (clickedRoll && canRoll)
+        if (lane is null)
         {
-            this.rollClickArmed = false;
-            this.awaitingLocalRoll = true;
-            this.pendingChat = this.RollCommand();
-            this.pendingChatAt = Environment.TickCount64 + Random.Shared.Next(100, 301);
-            this.status = $"Bowling… {local!.Game.RemainingPins} pin(s) still standing. Make it dramatic.";
+            this.status = $"Heard a dart ({pins}) from {rolledName ?? sender ?? "party chat"} but they're not on the board.";
+            return true;
         }
 
-        this.FlushPendingChat();
-
-        ImGui.SameLine();
-        if (NeonTheme.GlowButton("  NEW GAME  ", NeonTheme.Magenta))
-        {
-            this.lanes.ResetVisible();
-            this.awaitingLocalRoll = false;
-            this.rollClickArmed = true;
-            this.pendingChat = null;
-            this.commandReadyAt = 0;
-            this.lastScoredId = null;
-            this.status = "Fresh lanes. Don't choke.";
-        }
-
-        ImGui.SameLine();
-        if (NeonTheme.GlowButton("  CARRD  ", NeonTheme.Gold))
-            Util.OpenLink("https://neoncelestial.carrd.co/");
-
-        ImGui.PopStyleColor();
-        this.labelFont.Pop();
-
-        this.DrawLaneFixes(onApproach);
-
-        NeonTheme.GlowSeparator();
-
-        this.labelFont.Push();
-        ImGui.TextColored(NeonTheme.Cyan, "ADD A BOWLER");
-        ImGui.SetNextItemWidth(280);
-        var addGuest = ImGui.InputTextWithHint("##guest_name", "First Last", ref this.guestName, 40, ImGuiInputTextFlags.EnterReturnsTrue);
-        ImGui.SameLine();
-        if (NeonTheme.GlowButton("  ADD  ", NeonTheme.Cyan) || addGuest)
-            this.TryAddGuest();
-        this.labelFont.Pop();
-
-        NeonTheme.GlowSeparator();
-
-        if (ImGui.BeginChild("neon_lanes", new Vector2(0, -42), true))
-        {
-            ulong? removeId = null;
-            string? removedName = null;
-            foreach (var lane in this.lanes.Visible)
-            {
-                if (this.DrawLane(lane, onApproach, out var drop) && drop)
-                {
-                    removeId = lane.ContentId;
-                    removedName = lane.Name;
-                    break;
-                }
-            }
-
-            if (removeId is ulong id && removedName is not null)
-            {
-                this.lanes.TryRemoveGuest(id);
-                this.status = $"{removedName} left the lanes.";
-            }
-        }
-
-        ImGui.EndChild();
-        NeonTheme.StatusBar(this.status);
-        NeonTheme.Pop();
-    }
-
-    private void SyncRoster() =>
-        this.lanes.Sync(this.partyList, this.objectTable.LocalPlayer, this.playerState.ContentId);
-
-    private BowlerLane? LocalLane()
-    {
-        foreach (var lane in this.lanes.Visible)
+        var onOche = this.lanes.WhoseDartTurn();
+        if (onOche is null || !ReferenceEquals(onOche, lane))
         {
             if (lane.IsLocal)
-                return lane;
+                this.awaitingLocalDart = false;
+
+            var offTurn = lane.IsLocal ? "You" : lane.Name;
+            var waitFor = onOche is null ? "the clock is done" : $"it's {onOche.Name}'s darts";
+            this.status = $"{offTurn} threw {pins}, but {waitFor}. That dart doesn't count.";
+            return true;
         }
 
-        return null;
-    }
+        if (lane.IsLocal)
+            this.awaitingLocalDart = false;
 
-    private void FlushPendingChat()
-    {
-        if (this.pendingChat is null || Environment.TickCount64 < this.pendingChatAt)
-            return;
+        var key = $"{lane.ContentId}:d:{pins}";
+        var now = Environment.TickCount64;
+        if (key == this.lastDartKey && now - this.lastDartTicks < 800)
+            return true;
 
-        if (!NclVenue.IsAt(this.playerState))
+        this.lastDartKey = key;
+        this.lastDartTicks = now;
+
+        if (!this.lanes.TryApplyDart(lane, pins, out var hit, out var turnOver, out var error))
         {
-            this.pendingChat = null;
-            this.awaitingLocalRoll = false;
-            return;
+            this.status = error ?? "Could not apply that dart.";
+            return true;
         }
 
-        var command = this.pendingChat;
-        this.pendingChat = null;
-        GameChat.SendCommand(command);
-        this.commandReadyAt = Environment.TickCount64 + 1200;
-    }
+        this.lastDartId = lane.ContentId;
+        var who = lane.IsLocal ? "You" : lane.Name;
+        var mark = hit
+            ? (lane.Clock.IsComplete ? "BULLSEYE — clock finished!" : $"HIT  ·  now aiming {lane.Clock.AimLabel}")
+            : "miss";
+        this.status = $"{who}: {pins} → {mark}";
+        if (turnOver)
+        {
+            var next = this.lanes.WhoseDartTurn();
+            if (next is not null)
+                this.status += $"  Next up: {next.Name}.";
+        }
 
-    private static bool IsCommandRestricted(string text) =>
-        text.Contains("Consecutive text command input is currently restricted", StringComparison.OrdinalIgnoreCase);
-
-    private string RollCommand()
-    {
-        // Guests may not be in the party, so those games stay on world /random.
-        // A recognized party with no guests uses /dice party so every client sees the throw.
-        if (this.lanes.HasManualGuest || this.partyList.Length <= 1)
-            return "/random 11";
-
-        return "/dice party 11";
+        return true;
     }
 
     private string RosterHeadline()
@@ -549,6 +840,82 @@ public sealed class BowlingWindow : Window, IDisposable
             onApproach is null
                 ? "Gutter, pass, skip an AFK bowler, undo, or mark a missed throw."
                 : $"Gutter, pass, skip, undo, or mark — only for {onApproach.Name} (on the approach).");
+    }
+
+    private void DrawDartFixes(BowlerLane? onOche)
+    {
+        var canFix = onOche is not null && !onOche.Clock.IsComplete;
+
+        this.labelFont.Push();
+        ImGui.PushStyleColor(ImGuiCol.Text, NeonTheme.Ice);
+
+        ImGui.BeginDisabled(!canFix);
+        if (NeonTheme.GlowButton("  MISS  ", NeonTheme.Magenta) && canFix)
+            this.ApplyManualDart(onOche!, 3);
+        ImGui.SameLine();
+        if (NeonTheme.GlowButton("  HIT  ", NeonTheme.Cyan) && canFix)
+            this.ApplyManualDart(onOche!, onOche!.Clock.IsBullseye ? 10 : 2);
+        ImGui.SameLine();
+        if (NeonTheme.GlowButton("  SKIP  ", NeonTheme.Gold) && canFix)
+            this.SkipDartAfk(onOche!);
+        ImGui.EndDisabled();
+
+        ImGui.SameLine();
+        ImGui.SetNextItemWidth(52);
+        ImGui.InputInt("##mark_dart", ref this.markDart, 0);
+        if (this.markDart < 1)
+            this.markDart = 1;
+        if (this.markDart > 10)
+            this.markDart = 10;
+
+        ImGui.SameLine();
+        ImGui.BeginDisabled(!canFix);
+        if (NeonTheme.GlowButton("  MARK  ", NeonTheme.Cyan) && canFix)
+            this.ApplyManualDart(onOche!, this.markDart);
+        ImGui.EndDisabled();
+
+        ImGui.PopStyleColor();
+        this.labelFont.Pop();
+        ImGui.TextColored(
+            NeonTheme.Muted,
+            onOche is null
+                ? "Hit, miss, skip an AFK thrower, or mark a /random 10 the scorecard missed."
+                : $"Only {onOche.Name}'s darts — aiming {onOche.Clock.AimLabel}.");
+    }
+
+    private void ApplyManualDart(BowlerLane lane, int roll)
+    {
+        this.awaitingLocalDart = false;
+        this.pendingChat = null;
+        if (!this.lanes.TryApplyDart(lane, roll, out var hit, out var turnOver, out var error))
+        {
+            this.status = error ?? "Could not mark that dart.";
+            return;
+        }
+
+        this.lastDartId = lane.ContentId;
+        var mark = hit
+            ? (lane.Clock.IsComplete ? "BULLSEYE — clock finished!" : $"HIT  ·  now aiming {lane.Clock.AimLabel}")
+            : "miss";
+        this.status = $"{lane.Name}: {roll} → {mark}";
+        if (turnOver)
+        {
+            var next = this.lanes.WhoseDartTurn();
+            if (next is not null)
+                this.status += $"  Next up: {next.Name}.";
+        }
+    }
+
+    private void SkipDartAfk(BowlerLane lane)
+    {
+        this.awaitingLocalDart = false;
+        this.pendingChat = null;
+        lane.Clock.SkipRestOfTurn();
+        lane.SittingOut = true;
+        var next = this.lanes.WhoseDartTurn();
+        this.status = $"{lane.Name} is sitting out (AFK).";
+        if (next is not null)
+            this.status += $"  Next up: {next.Name}.";
     }
 
     private void ApplyManualThrow(BowlerLane lane, int pins)
@@ -657,7 +1024,7 @@ public sealed class BowlingWindow : Window, IDisposable
             return;
         }
 
-        this.status = $"{this.guestName.Trim()} has a lane. We'll score their /random 11.";
+        this.status = $"{this.guestName.Trim()} has a lane. We'll score their bowling /random 11 and darts /random 10.";
         this.guestName = string.Empty;
     }
 
@@ -730,6 +1097,101 @@ public sealed class BowlingWindow : Window, IDisposable
 
         NeonTheme.EndLaneCard(isTurn);
         return false;
+    }
+
+    private bool DrawDartLane(BowlerLane lane, BowlerLane? onOche, out bool removeGuest)
+    {
+        removeGuest = false;
+        var clock = lane.Clock;
+        var isTurn = onOche is not null && ReferenceEquals(onOche, lane);
+        var title = lane.Name;
+        if (lane.IsLocal)
+            title += "  ·  YOU";
+        if (lane.IsManual)
+            title += "  ·  GUEST";
+        if (lane.SittingOut)
+            title += "  ·  AFK";
+        else if (isTurn)
+            title += "  ·  UP";
+        if (clock.IsComplete)
+            title += "  ·  FINISHED";
+
+        NeonTheme.BeginLaneCard(lane.ContentId + 17, isTurn);
+
+        if (lane.SittingOut)
+        {
+            if (ImGui.SmallButton($"Back in##dback_{lane.ContentId}"))
+            {
+                lane.SittingOut = false;
+                this.status = $"{lane.Name} is back on the oche.";
+            }
+
+            ImGui.SameLine();
+        }
+        else if (!clock.IsComplete)
+        {
+            if (ImGui.SmallButton($"Skip##dskip_{lane.ContentId}"))
+            {
+                this.SkipDartAfk(lane);
+                NeonTheme.EndLaneCard(isTurn);
+                return false;
+            }
+
+            ImGui.SameLine();
+        }
+
+        if (lane.IsManual)
+        {
+            if (ImGui.SmallButton($"Remove##drm_{lane.ContentId}"))
+            {
+                NeonTheme.EndLaneCard(isTurn);
+                removeGuest = true;
+                return true;
+            }
+
+            ImGui.SameLine();
+        }
+
+        ImGui.PushStyleColor(ImGuiCol.Header, isTurn ? NeonTheme.CurrentFrame : NeonTheme.Header);
+        var open = ImGui.CollapsingHeader($"{title}###dart_{lane.ContentId}", ImGuiTreeNodeFlags.DefaultOpen);
+        ImGui.PopStyleColor();
+
+        var dartLine = clock.IsComplete
+            ? "Around the clock — finished."
+            : $"Aiming {clock.AimLabel}  ·  dart {clock.DartsThisTurn + 1}/3  ·  points {clock.PointsEarned}/20";
+        ImGui.TextColored(NeonTheme.Lavender, dartLine);
+        if (clock.LastTurnMarks.Count > 0)
+        {
+            ImGui.SameLine();
+            ImGui.TextColored(NeonTheme.Gold, "  " + string.Join("  ", clock.LastTurnMarks));
+        }
+
+        if (open)
+            this.DrawClockPips(clock, $"pips_{lane.ContentId}");
+
+        NeonTheme.EndLaneCard(isTurn);
+        return false;
+    }
+
+    private void DrawClockPips(ClockGame clock, string id)
+    {
+        ImGui.PushID(id);
+        for (var n = 1; n <= ClockGame.LastNumber; n++)
+        {
+            if (n > 1)
+                ImGui.SameLine(0, 4f);
+            this.DrawPip(n.ToString(), n < clock.AimingAt, n == clock.AimingAt && !clock.IsComplete);
+        }
+
+        ImGui.SameLine(0, 8f);
+        this.DrawPip("BULL", clock.IsComplete, clock.IsBullseye);
+        ImGui.PopID();
+    }
+
+    private void DrawPip(string label, bool done, bool current)
+    {
+        var color = done ? NeonTheme.Gold : current ? NeonTheme.Magenta : NeonTheme.Muted;
+        ImGui.TextColored(color, done ? "●" + label : current ? "[" + label + "]" : label);
     }
 
     private void DrawScorecard(BowlingGame game, string id)

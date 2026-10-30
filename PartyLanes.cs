@@ -15,6 +15,7 @@ internal sealed class BowlerLane
     public bool Present { get; set; }
     public bool SittingOut { get; set; }
     public BowlingGame Game { get; } = new();
+    public ClockGame Clock { get; } = new();
 }
 
 /// <summary>
@@ -161,6 +162,38 @@ internal sealed class PartyLanes
         return next;
     }
 
+    public BowlerLane? WhoseDartTurn()
+    {
+        foreach (var lane in this.order)
+        {
+            if (lane.SittingOut || lane.Clock.IsComplete)
+                continue;
+
+            if (lane.Clock.IsTurnInProgress)
+                return lane;
+        }
+
+        BowlerLane? next = null;
+        var fewest = int.MaxValue;
+        foreach (var lane in this.order)
+        {
+            if (lane.SittingOut || lane.Clock.IsComplete)
+                continue;
+
+            var done = lane.Clock.CompletedTurns;
+            if (done > fewest)
+                continue;
+
+            if (done < fewest)
+            {
+                fewest = done;
+                next = lane;
+            }
+        }
+
+        return next;
+    }
+
     public BowlerLane? FindBowler(params string?[] hints)
     {
         foreach (var hint in hints)
@@ -207,10 +240,32 @@ internal sealed class PartyLanes
         return lane.Game.TryAddRoll(pins, out counted, out overshot, out error);
     }
 
+    public bool TryApplyDart(BowlerLane lane, int roll, out bool hit, out bool turnOver, out string? error)
+    {
+        hit = false;
+        turnOver = false;
+        var onOche = this.WhoseDartTurn();
+        if (onOche is null || !ReferenceEquals(onOche, lane))
+        {
+            error = onOche is null
+                ? "That clock is finished."
+                : $"It's {onOche.Name}'s darts.";
+            return false;
+        }
+
+        return lane.Clock.TryThrow(roll, out hit, out turnOver, out error);
+    }
+
     public void ResetVisible()
     {
         foreach (var lane in this.order)
             lane.Game.Reset();
+    }
+
+    public void ResetClocks()
+    {
+        foreach (var lane in this.order)
+            lane.Clock.Reset();
     }
 
     private BowlerLane Upsert(ulong id, string name, bool isLocal, bool isLeader, bool isManual)

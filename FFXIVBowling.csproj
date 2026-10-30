@@ -2,7 +2,7 @@
   <PropertyGroup>
     <AssemblyName>NCLBowlingScore</AssemblyName>
     <Product>NCL Bowling Score</Product>
-    <Version>1.0.8.0</Version>
+    <Version>1.0.9.0</Version>
     <Description>NCL Bowling Score — keep score at Neon Celestial Lanes.</Description>
     <PackageProjectUrl>https://github.com/NeonCelestialLanes/NCL-Bowling-Score-Keeper</PackageProjectUrl>
     <IsPackable>false</IsPackable>
@@ -10,6 +10,12 @@
   </PropertyGroup>
   <ItemGroup>
     <Content Include="Assets\ncl-logo.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\menu-food.jpg">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Assets\menu-drink.jpg">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
     <Content Include="Assets\LuckiestGuy-Regular.ttf">

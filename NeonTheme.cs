@@ -86,11 +86,16 @@ internal static class NeonTheme
         ImGui.PushStyleColor(ImGuiCol.FrameBg, FrameBg);
         ImGui.PushStyleColor(ImGuiCol.FrameBgHovered, new Vector4(0.16f, 0.06f, 0.28f, 0.95f));
         ImGui.PushStyleColor(ImGuiCol.FrameBgActive, new Vector4(0.18f, 0.08f, 0.32f, 1f));
+        ImGui.PushStyleColor(ImGuiCol.Tab, new Vector4(0.14f, 0.04f, 0.26f, 0.96f));
+        ImGui.PushStyleColor(ImGuiCol.TabHovered, ButtonHovered);
+        ImGui.PushStyleColor(ImGuiCol.TabActive, new Vector4(0.00f, 0.42f, 0.38f, 1f));
+        ImGui.PushStyleColor(ImGuiCol.TabUnfocused, TitleBg);
+        ImGui.PushStyleColor(ImGuiCol.TabUnfocusedActive, Header);
     }
 
     public static void Pop()
     {
-        ImGui.PopStyleColor(24);
+        ImGui.PopStyleColor(29);
         ImGui.PopStyleVar(11);
     }
 
