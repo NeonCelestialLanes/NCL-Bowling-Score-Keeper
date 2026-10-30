@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Neon Celestial Lanes — scorecard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Luckiest+Guy&family=Nunito:wght@500;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --cyan: #00f2c7;
+      --ice: #96e0ff;
+      --magenta: #ff6ed1;
+      --gold: #ffe638;
+      --lavender: #ebd6ff;
+      --muted: #c7b3e6;
+      --win: rgba(34, 12, 62, 0.96);
+      --title: #3b1470;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      background: #140628;
+      color: var(--ice);
+      font-family: Nunito, "Segoe UI", sans-serif;
+    }
+    .stage { padding: 16px; display: grid; place-items: start center; }
+    .window {
+      width: 780px;
+      background: var(--win);
+      border: 1.4px solid var(--cyan);
+      border-radius: 12px;
+      box-shadow: 0 0 0 1px rgba(255, 110, 209, 0.2), 0 16px 40px rgba(8, 0, 20, 0.5);
+      position: relative;
+      overflow: hidden;
+    }
+    .spark {
+      position: absolute;
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      box-shadow: 0 0 8px currentColor;
+    }
+    .titlebar {
+      background: var(--title);
+      display: flex;
+      justify-content: space-between;
+      padding: 8px 14px;
+      font-size: 13px;
+      border-bottom: 1px solid rgba(0, 242, 199, 0.35);
+    }
+    .body { padding: 14px 16px 16px; }
+    .brand {
+      font-family: "Luckiest Guy", cursive;
+      font-size: 20px;
+      color: var(--cyan);
+      text-shadow: 0 0 12px rgba(0, 242, 199, 0.45);
+    }
+    .sub {
+      font-family: "Luckiest Guy", cursive;
+      color: var(--magenta);
+      font-size: 13px;
+      margin: 2px 0 10px;
+    }
+    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
+    button, .btn {
+      background: rgba(26, 16, 56, 0.95);
+      color: var(--ice);
+      border: 1.2px solid var(--cyan);
+      padding: 5px 14px;
+      font-family: "Luckiest Guy", cursive;
+      font-size: 13px;
+      border-radius: 999px;
+    }
+    .tiny {
+      font-size: 11px;
+      padding: 3px 8px;
+      margin-right: 8px;
+    }
+    hr {
+      border: 0;
+      border-top: 1px solid rgba(255, 110, 209, 0.5);
+      margin: 8px 0;
+    }
+    .lane { font-family: "Luckiest Guy", cursive; color: var(--cyan); font-size: 14px; }
+    .meta { color: var(--lavender); font-size: 13px; line-height: 1.45; }
+    .gold { color: var(--gold); }
+    input {
+      width: 280px;
+      background: rgba(20, 8, 40, 0.9);
+      border: 1.2px solid var(--cyan);
+      border-radius: 999px;
+      color: var(--ice);
+      padding: 6px 12px;
+      font: inherit;
+    }
+    input::placeholder { color: #7f6aa0; }
+    .lanes {
+      border: 1px solid rgba(0, 242, 199, 0.35);
+      border-radius: 10px;
+      padding: 8px;
+      max-height: 420px;
+      overflow: auto;
+      background: rgba(20, 8, 40, 0.35);
+    }
+    .bowler {
+      border: 1px solid rgba(0, 242, 199, 0.35);
+      border-radius: 8px;
+      padding: 8px;
+      margin: 8px 0 0;
+      background: rgba(46, 18, 78, 0.55);
+    }
+    .bowler.up {
+      border-color: var(--magenta);
+      box-shadow: inset 0 0 12px rgba(255, 110, 209, 0.25);
+    }
+    .head {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 6px;
+      table-layout: fixed;
+      font-size: 12px;
+    }
+    th, td {
+      border: 1px solid rgba(0, 242, 199, 0.5);
+      padding: 5px 2px;
+      text-align: center;
+      background: rgba(46, 18, 78, 0.8);
+    }
+    th {
+      background: rgba(64, 20, 107, 0.95);
+      color: var(--cyan);
+      font-family: "Luckiest Guy", cursive;
+      font-weight: 400;
+    }
+    td.current { background: rgba(217, 46, 158, 0.42); }
+    .status { color: var(--magenta); margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <div class="stage">
+    <div class="window">
+      <span class="spark" style="left:8%;top:12%;color:var(--gold)"></span>
+      <span class="spark" style="left:86%;top:14%;color:var(--magenta)"></span>
+      <div class="titlebar"><span>Neon Celestial Lanes</span><span>✕</span></div>
+      <div class="body">
+        <div class="brand">NEON CELESTIAL LANES <span class="gold">✦</span></div>
+        <div class="sub">Goblin  ·  LB W17 P21</div>
+        <div class="lane">LANES  ·  3 bowlers (party + guests)</div>
+        <div class="meta gold">On the approach: Mikh Aliapoh</div>
+        <div class="row">
+          <button>ROLL BALL</button>
+          <button>NEW GAME</button>
+        </div>
+        <hr />
+        <div class="lane">ADD A BOWLER</div>
+        <div class="row">
+          <input type="text" placeholder="First Last" />
+          <button>ADD</button>
+        </div>
+        <hr />
+        <div class="lanes">
+          <div class="bowler up">
+            <div class="lane">Mikh Aliapoh  ·  YOU  ·  UP</div>
+            <div class="meta">Frame 4 / 10  ·  ball 2  ·  standing: 2 <span class="gold">Score 48</span></div>
+            <table>
+              <thead><tr><th>F1</th><th>F2</th><th>F3</th><th>F4</th><th>F5</th><th>F6</th><th>F7</th><th>F8</th><th>F9</th><th>F10</th><th>Total</th></tr></thead>
+              <tbody>
+                <tr><td>X</td><td>7  /</td><td>9  -</td><td class="current">8</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+                <tr><td>20</td><td>39</td><td>48</td><td class="current"></td><td></td><td></td><td></td><td></td><td></td><td></td><td>48</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="bowler">
+            <div class="lane">Party Friend  ·  LEADER</div>
+            <div class="meta">Frame 3 / 10  ·  ball 1  ·  standing: 10 <span class="gold">Score 39</span></div>
+          </div>
+          <div class="bowler">
+            <div class="head">
+              <button class="tiny">Remove</button>
+              <div class="lane">Walk-up Guest  ·  GUEST</div>
+            </div>
+            <div class="meta">Frame 1 / 10  ·  ball 1  ·  standing: 10 <span class="gold">Score 0</span></div>
+          </div>
+        </div>
+        <div class="status">Walk-up Guest has a lane. We'll score their /random 11.</div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
