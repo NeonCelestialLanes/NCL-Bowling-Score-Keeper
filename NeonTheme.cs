@@ -181,8 +181,8 @@ internal static class NeonTheme
         if (logo is not null && logo.Handle != nint.Zero && logo.Width > 0 && logo.Height > 0)
             logoW = logoH * logo.Width / logo.Height;
 
-        var logoX = start.X + MathF.Max(12f, (width - logoW - 56f) * 0.5f);
-        var logoY = start.Y + 6f;
+        var logoX = start.X + 12f;
+        var logoY = start.Y + ((height - logoH) * 0.5f);
         if (logo is not null && logo.Handle != nint.Zero)
         {
             ImGui.SetCursorScreenPos(new Vector2(logoX, logoY));
@@ -190,12 +190,11 @@ internal static class NeonTheme
         }
 
         DrawBowlingBall(dl, new Vector2(end.X - 48f, start.Y + 42f), 16f, time);
-        DrawSpark(dl, new Vector2(logoX - 8f, logoY + 18f), 5.5f, Gold);
-        DrawSpark(dl, new Vector2(logoX + logoW + 6f, logoY + 12f), 4.2f, Ice);
+        DrawSpark(dl, new Vector2(logoX + logoW + 8f, logoY + 14f), 5.5f, Gold);
+        DrawSpark(dl, new Vector2(logoX + logoW + 22f, logoY + 6f), 3.2f, Ice);
 
         const string sub = "GOBLIN  ·  LB W17 P21  ·  OPEN BOWL";
-        var subSize = ImGui.CalcTextSize(sub);
-        var subPos = new Vector2(start.X + ((width - subSize.X) * 0.5f), start.Y + height - 28f);
+        var subPos = new Vector2(logoX + logoW + 16f, start.Y + (height * 0.5f) - 8f);
         if (labelFont is not null)
         {
             using (labelFont.Push())
