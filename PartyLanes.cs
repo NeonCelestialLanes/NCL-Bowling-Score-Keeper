@@ -13,6 +13,7 @@ internal sealed class BowlerLane
     public bool IsLeader { get; set; }
     public bool IsManual { get; set; }
     public bool Present { get; set; }
+    public bool SittingOut { get; set; }
     public BowlingGame Game { get; } = new();
 }
 
@@ -132,6 +133,9 @@ internal sealed class PartyLanes
     {
         foreach (var lane in this.order)
         {
+            if (lane.SittingOut || lane.Game.IsComplete)
+                continue;
+
             if (lane.Game.IsFrameInProgress)
                 return lane;
         }
@@ -140,7 +144,7 @@ internal sealed class PartyLanes
         var fewest = int.MaxValue;
         foreach (var lane in this.order)
         {
-            if (lane.Game.IsComplete)
+            if (lane.SittingOut || lane.Game.IsComplete)
                 continue;
 
             var done = lane.Game.CompletedFrames;
@@ -189,6 +193,17 @@ internal sealed class PartyLanes
 
     public bool TryApplyRoll(BowlerLane lane, int pins, out int counted, out bool overshot, out string? error)
     {
+        counted = 0;
+        overshot = false;
+        var onApproach = this.WhoseTurn();
+        if (onApproach is null || !ReferenceEquals(onApproach, lane))
+        {
+            error = onApproach is null
+                ? "The game is over."
+                : $"It's {onApproach.Name}'s turn.";
+            return false;
+        }
+
         return lane.Game.TryAddRoll(pins, out counted, out overshot, out error);
     }
 

@@ -263,20 +263,26 @@ public sealed class BowlingWindow : Window, IDisposable
         if (lane is null && isYou)
             lane = local;
 
-        var isLocalThrow = lane?.IsLocal == true;
-        if (isLocalThrow)
-        {
-            if (!this.awaitingLocalRoll)
-                return true;
-
-            this.awaitingLocalRoll = false;
-        }
-
         if (lane is null)
         {
             this.status = $"Heard a roll ({pins}) from {rolledName ?? sender ?? "party chat"} but they're not on a lane.";
             return true;
         }
+
+        var onApproach = this.lanes.WhoseTurn();
+        if (onApproach is null || !ReferenceEquals(onApproach, lane))
+        {
+            if (lane.IsLocal)
+                this.awaitingLocalRoll = false;
+
+            var offTurn = lane.IsLocal ? "You" : lane.Name;
+            var waitFor = onApproach is null ? "the game is over" : $"it's {onApproach.Name}'s turn";
+            this.status = $"{offTurn} rolled {pins}, but {waitFor}. That throw doesn't count.";
+            return true;
+        }
+
+        if (lane.IsLocal)
+            this.awaitingLocalRoll = false;
 
         var key = $"{lane.ContentId}:{pins}";
         var now = Environment.TickCount64;
@@ -367,7 +373,9 @@ public sealed class BowlingWindow : Window, IDisposable
                 ? $"  WAIT {cooldownMs / 1000f:0.0}s  ##rollball"
                 : localDone
                     ? "  GAME OVER  ##rollball"
-                    : "  ROLL BALL  ##rollball";
+                    : !localTurn
+                        ? "  WAIT YOUR TURN  ##rollball"
+                        : "  ROLL BALL  ##rollball";
         ImGui.BeginDisabled(!canRoll);
         var clickedRoll = NeonTheme.GlowButton(rollLabel, rollColor);
         ImGui.EndDisabled();
@@ -509,6 +517,9 @@ public sealed class BowlingWindow : Window, IDisposable
         ImGui.SameLine();
         if (NeonTheme.GlowButton("  PASS  ", NeonTheme.Cyan) && canFix)
             this.PassOpenFrame(onApproach!);
+        ImGui.SameLine();
+        if (NeonTheme.GlowButton("  SKIP  ", NeonTheme.Gold) && canFix)
+            this.SkipAfk(onApproach!);
         ImGui.EndDisabled();
 
         ImGui.SameLine();
@@ -533,7 +544,11 @@ public sealed class BowlingWindow : Window, IDisposable
 
         ImGui.PopStyleColor();
         this.labelFont.Pop();
-        ImGui.TextColored(NeonTheme.Muted, "Gutter, pass, undo, or mark a throw the scorecard missed.");
+        ImGui.TextColored(
+            NeonTheme.Muted,
+            onApproach is null
+                ? "Gutter, pass, skip an AFK bowler, undo, or mark a missed throw."
+                : $"Gutter, pass, skip, undo, or mark — only for {onApproach.Name} (on the approach).");
     }
 
     private void ApplyManualThrow(BowlerLane lane, int pins)
@@ -557,6 +572,20 @@ public sealed class BowlingWindow : Window, IDisposable
             if (next is not null)
                 this.status += $"  Next up: {next.Name}.";
         }
+    }
+
+    private void SkipAfk(BowlerLane lane)
+    {
+        this.awaitingLocalRoll = false;
+        this.pendingChat = null;
+        if (lane.Game.IsFrameInProgress)
+            lane.Game.TryPassFrame(out _, out _);
+
+        lane.SittingOut = true;
+        var next = this.lanes.WhoseTurn();
+        this.status = $"{lane.Name} is sitting out (AFK).";
+        if (next is not null)
+            this.status += $"  Next up: {next.Name}.";
     }
 
     private void PassOpenFrame(BowlerLane lane)
@@ -644,10 +673,34 @@ public sealed class BowlingWindow : Window, IDisposable
             title += "  ·  LEADER";
         if (lane.IsManual)
             title += "  ·  GUEST";
-        if (isTurn)
+        if (lane.SittingOut)
+            title += "  ·  AFK";
+        else if (isTurn)
             title += "  ·  UP";
 
         NeonTheme.BeginLaneCard(lane.ContentId, isTurn);
+
+        if (lane.SittingOut)
+        {
+            if (ImGui.SmallButton($"Back in##back_{lane.ContentId}"))
+            {
+                lane.SittingOut = false;
+                this.status = $"{lane.Name} is back on the approach.";
+            }
+
+            ImGui.SameLine();
+        }
+        else if (!lane.Game.IsComplete)
+        {
+            if (ImGui.SmallButton($"Skip##skip_{lane.ContentId}"))
+            {
+                this.SkipAfk(lane);
+                NeonTheme.EndLaneCard(isTurn);
+                return false;
+            }
+
+            ImGui.SameLine();
+        }
 
         if (lane.IsManual)
         {
