@@ -283,7 +283,8 @@ internal static class NeonTheme
         1 => Ice,
         2 => Gold,
         3 => Magenta,
-        _ => Lavender,
+        4 => Lavender,
+        _ => Mix(Cyan, Magenta, 0.4f),
     };
 
     private static Vector4 Mix(Vector4 a, Vector4 b, float t) =>

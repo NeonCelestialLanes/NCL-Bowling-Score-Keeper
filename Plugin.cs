@@ -235,6 +235,7 @@ public sealed class BowlingWindow : Window, IDisposable
     private readonly ISharedImmediateTexture? menuDrink;
     private const string CarrdUrl = "https://neoncelestial.carrd.co/";
     private const string BilliardsUrl = "https://bloob.io/8ballpool";
+    private const string AetherphoneUrl = "https://aetherphone.net/";
 
     public BowlingWindow(
         IDalamudPluginInterface pluginInterface,
@@ -317,7 +318,7 @@ public sealed class BowlingWindow : Window, IDisposable
         NeonTheme.BrandHeader(this.logo?.GetWrapOrEmpty(), this.labelFont);
 
         this.tabFont.Push();
-        this.houseTab = NeonTheme.GlowTabBar(["BOWLING", "DARTS", "BILLIARDS", "MENU", "CARRD"], this.houseTab);
+        this.houseTab = NeonTheme.GlowTabBar(["BOWLING", "DARTS", "BILLIARDS", "JUKEBOX", "MENU", "CARRD"], this.houseTab);
         this.tabFont.Pop();
 
         switch (this.houseTab)
@@ -332,9 +333,12 @@ public sealed class BowlingWindow : Window, IDisposable
                 this.DrawBilliardsTab();
                 break;
             case 3:
-                this.DrawMenuTab();
+                this.DrawJukeboxTab();
                 break;
             case 4:
+                this.DrawMenuTab();
+                break;
+            case 5:
                 this.DrawCarrdTab();
                 break;
             default:
@@ -645,6 +649,32 @@ public sealed class BowlingWindow : Window, IDisposable
         this.labelFont.Pop();
         ImGui.Dummy(new Vector2(0, 8));
         ImGui.TextColored(NeonTheme.Lavender, BilliardsUrl);
+    }
+
+    private void DrawJukeboxTab()
+    {
+        this.labelFont.Push();
+        ImGui.TextColored(NeonTheme.Magenta, "NEON CELESTIAL LANES  ·  JUKEBOX");
+        ImGui.TextColored(NeonTheme.Muted, "We broadcast on MogCast. That's the watch-party app on Aetherphone.");
+        this.labelFont.Pop();
+        ImGui.Dummy(new Vector2(0, 8));
+
+        ImGui.TextColored(NeonTheme.Gold, "How to listen");
+        ImGui.TextWrapped("The house screen is on MogCast, so everyone hears and sees the same thing. Tune in on your Aetherphone and you're on the broadcast with the rest of the house.");
+        ImGui.Dummy(new Vector2(0, 6));
+        ImGui.BulletText("If you have an Aetherphone: type /phone, open MogCast, and join the NCL broadcast.");
+        ImGui.BulletText("Look for the in-world screen at the lanes. Playback stays in sync.");
+        ImGui.BulletText("No phone yet? Grab Aetherphone, then come back and hop on MogCast.");
+        ImGui.Dummy(new Vector2(0, 12));
+
+        this.labelFont.Push();
+        ImGui.PushStyleColor(ImGuiCol.Text, NeonTheme.Ice);
+        if (NeonTheme.GlowButton("  GET AETHERPHONE  ", NeonTheme.Magenta))
+            Util.OpenLink(AetherphoneUrl);
+        ImGui.PopStyleColor();
+        this.labelFont.Pop();
+        ImGui.Dummy(new Vector2(0, 8));
+        ImGui.TextColored(NeonTheme.Lavender, "aetherphone.net  ·  /phone  ·  MogCast");
     }
 
     private void DrawMenuTab()
