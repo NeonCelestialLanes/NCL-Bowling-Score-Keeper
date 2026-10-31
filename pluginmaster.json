@@ -12,10 +12,10 @@
     "IsHide": false,
     "IsTestingExclusive": false,
     "DownloadCount": 0,
-    "LastUpdate": "1793456847",
-    "DownloadLinkInstall": "https://github.com/NeonCelestialLanes/NCL-Bowling-Score-Keeper/releases/download/1.0.18.0/NCLBowlingScore-1.0.18.0.zip",
-    "DownloadLinkUpdate": "https://github.com/NeonCelestialLanes/NCL-Bowling-Score-Keeper/releases/download/1.0.18.0/NCLBowlingScore-1.0.18.0.zip",
-    "DownloadLinkTesting": "https://github.com/NeonCelestialLanes/NCL-Bowling-Score-Keeper/releases/download/1.0.18.0/NCLBowlingScore-1.0.18.0.zip",
+    "LastUpdate": "1793457013",
+    "DownloadLinkInstall": "https://raw.githubusercontent.com/NeonCelestialLanes/NCL-Bowling-Score-Keeper/main/plugins/NCLBowlingScore/NCLBowlingScore-1.0.18.0.zip",
+    "DownloadLinkUpdate": "https://raw.githubusercontent.com/NeonCelestialLanes/NCL-Bowling-Score-Keeper/main/plugins/NCLBowlingScore/NCLBowlingScore-1.0.18.0.zip",
+    "DownloadLinkTesting": "https://raw.githubusercontent.com/NeonCelestialLanes/NCL-Bowling-Score-Keeper/main/plugins/NCLBowlingScore/NCLBowlingScore-1.0.18.0.zip",
     "IconUrl": "https://raw.githubusercontent.com/NeonCelestialLanes/NCL-Bowling-Score-Keeper/main/images/icon.png",
     "Tags": ["minigame", "bowling", "random", "ncl"]
   }
