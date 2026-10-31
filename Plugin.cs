@@ -71,6 +71,7 @@ public sealed class Plugin : IDalamudPlugin
 
         this.PluginInterface.UiBuilder.Draw += this.DrawUI;
         this.PluginInterface.UiBuilder.OpenMainUi += this.OnCommandOpen;
+        this.PluginInterface.UiBuilder.OpenConfigUi += this.OnCommandOpen;
         this.ChatGui.ChatMessage += this.OnChatMessage;
         this.ChatGui.ChatMessageUnhandled += this.OnChatMessagePlain;
     }
@@ -108,6 +109,7 @@ public sealed class Plugin : IDalamudPlugin
         this.ChatGui.ChatMessage -= this.OnChatMessage;
         this.PluginInterface.UiBuilder.Draw -= this.DrawUI;
         this.PluginInterface.UiBuilder.OpenMainUi -= this.OnCommandOpen;
+        this.PluginInterface.UiBuilder.OpenConfigUi -= this.OnCommandOpen;
         this.CommandManager.RemoveHandler(CommandName);
         this.WindowSystem.RemoveAllWindows();
         this.Window.Dispose();
