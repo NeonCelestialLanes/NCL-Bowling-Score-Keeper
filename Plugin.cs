@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Text;
 using System.Text.RegularExpressions;
 using Dalamud.Game.Chat;
@@ -223,7 +224,8 @@ public sealed class BowlingWindow : Window, IDisposable
     private bool rollClickArmed = true;
     private string lastRollKey = string.Empty;
     private long lastRollTicks;
-    private readonly System.Collections.Generic.List<(string Command, long At)> outgoing = new();
+    private readonly List<(string Command, long At)> outgoing = new();
+    private readonly Dictionary<ulong, bool> sheetOpen = new();
     private long commandReadyAt;
     private int markPins;
     private ulong? lastScoredId;
@@ -352,7 +354,8 @@ public sealed class BowlingWindow : Window, IDisposable
                 break;
         }
 
-        NeonTheme.StatusBar(this.status);
+        if (this.houseTab is 0 or 1)
+            NeonTheme.StatusBar(this.status);
         NeonTheme.Pop();
     }
 
@@ -806,6 +809,12 @@ public sealed class BowlingWindow : Window, IDisposable
 
     private void SyncRoster() =>
         this.lanes.Sync(this.partyList, this.objectTable.LocalPlayer, this.playerState.ContentId);
+
+    private bool SheetOpen(ulong key) =>
+        !this.sheetOpen.TryGetValue(key, out var open) || open;
+
+    private void ToggleSheet(ulong key) =>
+        this.sheetOpen[key] = !this.SheetOpen(key);
 
     private BowlerLane? LocalLane()
     {
@@ -1272,41 +1281,43 @@ public sealed class BowlingWindow : Window, IDisposable
 
         if (lane.SittingOut)
         {
-            if (ImGui.SmallButton($"Back in##back_{lane.ContentId}"))
+            if (NeonTheme.Chip($"Back in##back_{lane.ContentId}", NeonTheme.Cyan))
             {
                 lane.SittingOut = false;
                 this.status = $"{lane.Name} is back on the approach.";
             }
 
-            ImGui.SameLine();
+            ImGui.SameLine(0, 8f);
         }
         else if (!lane.Game.IsComplete)
         {
-            if (ImGui.SmallButton($"Skip##skip_{lane.ContentId}"))
+            if (NeonTheme.Chip($"Skip##skip_{lane.ContentId}", NeonTheme.Gold))
             {
                 this.SkipAfk(lane);
                 NeonTheme.EndLaneCard(isTurn);
                 return false;
             }
 
-            ImGui.SameLine();
+            ImGui.SameLine(0, 8f);
         }
 
         if (lane.IsManual)
         {
-            if (ImGui.SmallButton($"Remove##rm_{lane.ContentId}"))
+            if (NeonTheme.Chip($"Remove##rm_{lane.ContentId}", NeonTheme.Magenta))
             {
                 NeonTheme.EndLaneCard(isTurn);
                 removeGuest = true;
                 return true;
             }
 
-            ImGui.SameLine();
+            ImGui.SameLine(0, 8f);
         }
 
-        ImGui.PushStyleColor(ImGuiCol.Header, isTurn ? NeonTheme.CurrentFrame : NeonTheme.Header);
-        var open = ImGui.CollapsingHeader($"{title}###lane_{lane.ContentId}", ImGuiTreeNodeFlags.DefaultOpen);
-        ImGui.PopStyleColor();
+        this.tabFont.Push();
+        if (NeonTheme.NamePlate($"lane_name_{lane.ContentId}", title, NeonTheme.Purple, ImGui.GetContentRegionAvail().X))
+            this.ToggleSheet(lane.ContentId);
+        this.tabFont.Pop();
+        var open = this.SheetOpen(lane.ContentId);
 
         ImGui.TextColored(NeonTheme.Lavender,
             game.IsComplete
@@ -1343,41 +1354,44 @@ public sealed class BowlingWindow : Window, IDisposable
 
         if (lane.SittingOut)
         {
-            if (ImGui.SmallButton($"Back in##dback_{lane.ContentId}"))
+            if (NeonTheme.Chip($"Back in##dback_{lane.ContentId}", NeonTheme.Cyan))
             {
                 lane.SittingOut = false;
                 this.status = $"{lane.Name} is back on the oche.";
             }
 
-            ImGui.SameLine();
+            ImGui.SameLine(0, 8f);
         }
         else if (!clock.IsComplete)
         {
-            if (ImGui.SmallButton($"Skip##dskip_{lane.ContentId}"))
+            if (NeonTheme.Chip($"Skip##dskip_{lane.ContentId}", NeonTheme.Gold))
             {
                 this.SkipDartAfk(lane);
                 NeonTheme.EndLaneCard(isTurn);
                 return false;
             }
 
-            ImGui.SameLine();
+            ImGui.SameLine(0, 8f);
         }
 
         if (lane.IsManual)
         {
-            if (ImGui.SmallButton($"Remove##drm_{lane.ContentId}"))
+            if (NeonTheme.Chip($"Remove##drm_{lane.ContentId}", NeonTheme.Magenta))
             {
                 NeonTheme.EndLaneCard(isTurn);
                 removeGuest = true;
                 return true;
             }
 
-            ImGui.SameLine();
+            ImGui.SameLine(0, 8f);
         }
 
-        ImGui.PushStyleColor(ImGuiCol.Header, isTurn ? NeonTheme.CurrentFrame : NeonTheme.Header);
-        var open = ImGui.CollapsingHeader($"{title}###dart_{lane.ContentId}", ImGuiTreeNodeFlags.DefaultOpen);
-        ImGui.PopStyleColor();
+        var dartKey = lane.ContentId ^ 0xD000_0000UL;
+        this.tabFont.Push();
+        if (NeonTheme.NamePlate($"dart_name_{lane.ContentId}", title, NeonTheme.Purple, ImGui.GetContentRegionAvail().X))
+            this.ToggleSheet(dartKey);
+        this.tabFont.Pop();
+        var open = this.SheetOpen(dartKey);
 
         var dartLine = clock.IsComplete
             ? "Around the clock — finished."
@@ -1403,65 +1417,19 @@ public sealed class BowlingWindow : Window, IDisposable
         {
             if (n > 1)
                 ImGui.SameLine(0, 4f);
-            this.DrawPip(n.ToString(), n < clock.AimingAt, n == clock.AimingAt && !clock.IsComplete);
+            NeonTheme.ClockPip(n.ToString(), n < clock.AimingAt, n == clock.AimingAt && !clock.IsComplete);
         }
 
         ImGui.SameLine(0, 8f);
-        this.DrawPip("BULL", clock.IsComplete, clock.IsBullseye);
+        NeonTheme.ClockPip("BULL", clock.IsComplete, clock.IsBullseye);
         ImGui.PopID();
-    }
-
-    private void DrawPip(string label, bool done, bool current)
-    {
-        var color = done ? NeonTheme.Gold : current ? NeonTheme.Magenta : NeonTheme.Muted;
-        ImGui.TextColored(color, done ? "●" + label : current ? "[" + label + "]" : label);
     }
 
     private void DrawScorecard(BowlingGame game, string id)
     {
-        const ImGuiTableFlags flags =
-            ImGuiTableFlags.Borders |
-            ImGuiTableFlags.RowBg |
-            ImGuiTableFlags.SizingStretchSame;
-
-        if (!ImGui.BeginTable(id, 11, flags))
-            return;
-
-        for (var i = 1; i <= 10; i++)
-            ImGui.TableSetupColumn($"F{i}");
-        ImGui.TableSetupColumn("Total");
-        ImGui.TableHeadersRow();
-
-        var frames = game.GetFrames();
-
-        ImGui.TableNextRow();
-        foreach (var frame in frames)
-        {
-            ImGui.TableNextColumn();
-            if (frame.IsCurrent && !game.IsComplete)
-                ImGui.TableSetBgColor(ImGuiTableBgTarget.CellBg, ImGui.GetColorU32(NeonTheme.CurrentFrame));
-
-            var marks = FormatRolls(frame);
-            if (string.IsNullOrEmpty(marks))
-                ImGui.Dummy(new Vector2(1f, 1f));
-            else
-                ImGui.TextUnformatted(marks);
-        }
-
-        ImGui.TableNextColumn();
-        ImGui.Text(string.Empty);
-
-        ImGui.TableNextRow();
-        foreach (var frame in frames)
-        {
-            ImGui.TableNextColumn();
-            ImGui.Text(frame.CumulativeScore?.ToString() ?? string.Empty);
-        }
-
-        ImGui.TableNextColumn();
-        ImGui.TextColored(NeonTheme.Gold, game.TotalScore.ToString());
-
-        ImGui.EndTable();
+        ImGui.PushID(id);
+        NeonTheme.BowlingSheet(game.GetFrames(), game.TotalScore, game.IsComplete);
+        ImGui.PopID();
     }
 
     private string PreviousFrameSummary(BowlingGame game)

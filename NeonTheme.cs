@@ -13,10 +13,13 @@ namespace FFXIVBowling;
 /// </summary>
 internal static class NeonTheme
 {
-    public static readonly Vector4 Cyan = new(0.00f, 0.949f, 0.780f, 1f);
+    public static readonly Vector4 Cyan = new(0.10f, 1.00f, 0.92f, 1f);
     public static readonly Vector4 Ice = new(0.588f, 0.878f, 1.00f, 1f);
-    public static readonly Vector4 Magenta = new(1.00f, 0.43f, 0.82f, 1f);
-    public static readonly Vector4 Gold = new(1.00f, 0.90f, 0.22f, 1f);
+    public static readonly Vector4 White = new(1.00f, 1.00f, 1.00f, 1f);
+    public static readonly Vector4 Magenta = new(1.00f, 0.16f, 0.74f, 1f);
+    public static readonly Vector4 NeonPink = new(1.00f, 0.16f, 0.74f, 1f);
+    public static readonly Vector4 Gold = new(1.00f, 0.97f, 0.18f, 1f);
+    public static readonly Vector4 Purple = new(0.62f, 0.28f, 0.98f, 1f);
     public static readonly Vector4 Lavender = new(0.92f, 0.84f, 1.00f, 1f);
     public static readonly Vector4 Muted = new(0.78f, 0.70f, 0.90f, 1f);
     public static readonly Vector4 WindowBg = new(0.07f, 0.02f, 0.14f, 0.98f);
@@ -52,7 +55,7 @@ internal static class NeonTheme
     {
         ImGui.PushStyleVar(ImGuiStyleVar.WindowRounding, 16f);
         ImGui.PushStyleVar(ImGuiStyleVar.ChildRounding, 14f);
-        ImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, 18f);
+        ImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, 16f);
         ImGui.PushStyleVar(ImGuiStyleVar.GrabRounding, 12f);
         ImGui.PushStyleVar(ImGuiStyleVar.WindowBorderSize, 0f);
         ImGui.PushStyleVar(ImGuiStyleVar.ChildBorderSize, 0f);
@@ -87,8 +90,8 @@ internal static class NeonTheme
         ImGui.PushStyleColor(ImGuiCol.FrameBgHovered, new Vector4(0.16f, 0.06f, 0.28f, 0.95f));
         ImGui.PushStyleColor(ImGuiCol.FrameBgActive, new Vector4(0.18f, 0.08f, 0.32f, 1f));
         ImGui.PushStyleColor(ImGuiCol.Tab, new Vector4(0.14f, 0.04f, 0.26f, 0.96f));
-        ImGui.PushStyleColor(ImGuiCol.TabHovered, ButtonHovered);
-        ImGui.PushStyleColor(ImGuiCol.TabActive, new Vector4(0.00f, 0.42f, 0.38f, 1f));
+        ImGui.PushStyleColor(ImGuiCol.TabHovered, Mix(Cyan, Ice, 0.25f));
+        ImGui.PushStyleColor(ImGuiCol.TabActive, Mix(Cyan, new Vector4(0.05f, 0.12f, 0.20f, 1f), 0.35f));
         ImGui.PushStyleColor(ImGuiCol.TabUnfocused, TitleBg);
         ImGui.PushStyleColor(ImGuiCol.TabUnfocusedActive, Header);
     }
@@ -222,69 +225,65 @@ internal static class NeonTheme
 
         selected = Math.Clamp(selected, 0, n - 1);
         var avail = ImGui.GetContentRegionAvail().X;
-        const float height = 30f;
-        const float padX = 14f;
-        const float gap = 4f;
-        const float radius = 7f;
+        const float height = 34f;
+        const float inset = 4f;
         var row = ImGui.GetCursorScreenPos();
         var dl = ImGui.GetWindowDrawList();
-        var barY = row.Y + height;
-        Vector2 activeMin = default;
-        Vector2 activeMax = default;
+        var trackMax = row + new Vector2(avail, height);
+        var radius = height * 0.5f;
+
+        dl.AddRectFilled(row + new Vector2(0f, 3f), trackMax + new Vector2(0f, 4f), Col(new Vector4(0f, 0f, 0f, 0.42f)), radius);
+        dl.AddRectFilled(row, trackMax, Col(new Vector4(0.05f, 0.02f, 0.10f, 0.96f)), radius);
+        dl.AddRect(row, trackMax, Col(new Vector4(1f, 1f, 1f, 0.06f)), radius, ImDrawFlags.None, 1f);
+
+        var inner = avail - (inset * 2f);
+        var tabW = inner / n;
+        ImGui.SetCursorScreenPos(row + new Vector2(inset, inset));
 
         for (var i = 0; i < n; i++)
         {
             if (i > 0)
-                ImGui.SameLine(0, gap);
+                ImGui.SameLine(0, 0);
 
             var text = labels[i].Trim();
-            var width = ImGui.CalcTextSize(text).X + (padX * 2f);
             ImGui.PushID(i);
-            var clicked = ImGui.InvisibleButton("##ncl_tab", new Vector2(width, height));
+            var clicked = ImGui.InvisibleButton("##ncl_tab", new Vector2(tabW, height - (inset * 2f)));
             var hovered = ImGui.IsItemHovered();
+            var held = ImGui.IsItemActive();
             var min = ImGui.GetItemRectMin();
             var max = ImGui.GetItemRectMax();
             ImGui.PopID();
 
             var on = i == selected;
             var accent = TabAccent(i);
-            var ink = on ? accent : hovered ? Mix(accent, Ice, 0.35f) : Mix(accent, Ice, 0.55f);
-            var fill = Mix(new Vector4(0.08f, 0.02f, 0.14f, 0.96f), accent, on ? 0.42f : hovered ? 0.22f : 0.10f);
-
-            dl.AddRectFilled(min, max, Col(fill), radius, ImDrawFlags.RoundCornersTop);
-            dl.AddRect(min, max, Col(WithAlpha(accent, on ? 0.95f : hovered ? 0.75f : 0.55f)), radius, ImDrawFlags.RoundCornersTop, on ? 1.6f : 1.1f);
             if (on)
-                dl.AddLine(new Vector2(min.X + 1f, max.Y), new Vector2(max.X - 1f, max.Y), Col(fill), 3f);
+                DrawRaisedPill(dl, min, max, accent, filled: true, hovered, held, punch: 0.62f);
+            else if (hovered)
+                DrawRaisedPill(dl, min, max, accent, filled: true, hovered, held, punch: 0.22f);
 
             var textSize = ImGui.CalcTextSize(text);
-            var textPos = new Vector2(min.X + ((width - textSize.X) * 0.5f), min.Y + ((height - textSize.Y) * 0.5f) - 1f);
+            var textPos = new Vector2(min.X + ((tabW - textSize.X) * 0.5f), min.Y + (((height - (inset * 2f)) - textSize.Y) * 0.5f) - 1f);
+            var ink = on || hovered ? White : WithAlpha(White, 0.78f);
+            dl.AddText(textPos + new Vector2(0f, 1f), Col(new Vector4(0f, 0f, 0f, on ? 0.45f : 0.25f)), text);
             dl.AddText(textPos, Col(ink), text);
-
-            if (on)
-            {
-                activeMin = min;
-                activeMax = max;
-            }
 
             if (clicked && !on)
                 selected = i;
         }
 
-        var rail = TabAccent(selected);
-        dl.AddLine(new Vector2(row.X, barY), new Vector2(activeMin.X + 1f, barY), Col(WithAlpha(rail, 0.75f)), 1.4f);
-        dl.AddLine(new Vector2(activeMax.X - 1f, barY), new Vector2(row.X + avail, barY), Col(WithAlpha(rail, 0.75f)), 1.4f);
-        ImGui.Dummy(new Vector2(avail, 8f));
+        ImGui.SetCursorScreenPos(row);
+        ImGui.Dummy(new Vector2(avail, height + 10f));
         return selected;
     }
 
     private static Vector4 TabAccent(int index) => index switch
     {
         0 => Cyan,
-        1 => Ice,
+        1 => new Vector4(0.32f, 0.82f, 1.00f, 1f),
         2 => Gold,
         3 => Magenta,
-        4 => Lavender,
-        _ => Mix(Cyan, Magenta, 0.4f),
+        4 => new Vector4(0.78f, 0.48f, 1.00f, 1f),
+        _ => Mix(Cyan, Magenta, 0.45f),
     };
 
     private static Vector4 Mix(Vector4 a, Vector4 b, float t) =>
@@ -292,19 +291,206 @@ internal static class NeonTheme
 
     public static bool GlowButton(string label, Vector4 glow)
     {
-        var start = ImGui.GetCursorScreenPos();
         var text = label;
         var cut = label.IndexOf("##", StringComparison.Ordinal);
         if (cut >= 0)
             text = label[..cut];
 
-        var size = ImGui.CalcTextSize(text) + (ImGui.GetStyle().FramePadding * 2f);
+        var size = ImGui.CalcTextSize(text) + new Vector2(28f, 16f);
+        ImGui.PushID(label);
+        var clicked = ImGui.InvisibleButton("##glow", size);
+        var hovered = ImGui.IsItemHovered();
+        var held = ImGui.IsItemActive();
+        var min = ImGui.GetItemRectMin();
+        var max = ImGui.GetItemRectMax();
         var dl = ImGui.GetWindowDrawList();
-        var max = start + size;
-        dl.AddRectFilled(start - new Vector2(5f), max + new Vector2(5f), Col(WithAlpha(glow, 0.16f)), 22f);
-        dl.AddRectFilled(start - new Vector2(2f), max + new Vector2(2f), Col(WithAlpha(glow, 0.22f)), 20f);
-        dl.AddRect(start - new Vector2(1.2f), max + new Vector2(1.2f), Col(WithAlpha(glow, 0.95f)), 18f, ImDrawFlags.None, 1.7f);
-        return ImGui.Button(label);
+        DrawRaisedPill(dl, min, max, glow, filled: true, hovered, held, punch: 0.62f);
+
+        var textSize = ImGui.CalcTextSize(text);
+        var textPos = min + ((size - textSize) * 0.5f) + new Vector2(0f, held ? 1f : -0.5f);
+        var dim = ImGui.GetStyle().Alpha;
+        dl.AddText(textPos + new Vector2(0f, 1.2f), Col(new Vector4(0f, 0f, 0f, 0.45f * dim)), text);
+        dl.AddText(textPos, Col(WithAlpha(White, dim)), text);
+        ImGui.PopID();
+        return clicked;
+    }
+
+    public static bool Chip(string label, Vector4 glow)
+    {
+        var text = label;
+        var cut = label.IndexOf("##", StringComparison.Ordinal);
+        if (cut >= 0)
+            text = label[..cut];
+
+        var size = ImGui.CalcTextSize(text) + new Vector2(18f, 12f);
+        ImGui.PushID(label);
+        var clicked = ImGui.InvisibleButton("##chip", size);
+        var hovered = ImGui.IsItemHovered();
+        var held = ImGui.IsItemActive();
+        var min = ImGui.GetItemRectMin();
+        var max = ImGui.GetItemRectMax();
+        DrawRaisedPill(ImGui.GetWindowDrawList(), min, max, glow, filled: true, hovered, held, punch: 0.62f);
+        var textSize = ImGui.CalcTextSize(text);
+        var textPos = min + ((size - textSize) * 0.5f) + new Vector2(0f, held ? 1f : -0.5f);
+        var chipDl = ImGui.GetWindowDrawList();
+        chipDl.AddText(textPos + new Vector2(0f, 1.2f), Col(new Vector4(0f, 0f, 0f, 0.45f)), text);
+        chipDl.AddText(textPos, Col(White), text);
+        ImGui.PopID();
+        return clicked;
+    }
+
+    public static bool NamePlate(string id, string label, Vector4 accent, float width)
+    {
+        const float height = 32f;
+        ImGui.PushID(id);
+        var clicked = ImGui.InvisibleButton("##name", new Vector2(MathF.Max(80f, width), height));
+        var hovered = ImGui.IsItemHovered();
+        var held = ImGui.IsItemActive();
+        var min = ImGui.GetItemRectMin();
+        var max = ImGui.GetItemRectMax();
+        var dl = ImGui.GetWindowDrawList();
+        DrawRaisedPill(dl, min, max, accent, filled: true, hovered, held, punch: 0.58f);
+        var textSize = ImGui.CalcTextSize(label);
+        var textPos = new Vector2(min.X + 14f, min.Y + ((height - textSize.Y) * 0.5f) + (held ? 1f : -0.5f));
+        dl.AddText(textPos + new Vector2(0f, 1.2f), Col(new Vector4(0f, 0f, 0f, 0.4f)), label);
+        dl.AddText(textPos, Col(Ice), label);
+        ImGui.PopID();
+        return clicked;
+    }
+
+    public static void BowlingSheet(System.Collections.Generic.IReadOnlyList<FrameView> frames, int gameTotal, bool complete)
+    {
+        var avail = ImGui.GetContentRegionAvail().X;
+        const float height = 74f;
+        ImGui.Dummy(new Vector2(avail, height));
+        var min = ImGui.GetItemRectMin();
+        var max = ImGui.GetItemRectMax();
+        var dl = ImGui.GetWindowDrawList();
+        const float radius = 10f;
+
+        dl.AddRectFilled(min + new Vector2(0f, 3f), max + new Vector2(0.5f, 4f), Col(new Vector4(0f, 0f, 0f, 0.40f)), radius);
+        dl.AddRectFilled(min, max, Col(new Vector4(0.08f, 0.03f, 0.14f, 0.96f)), radius);
+        dl.AddRect(min, max, Col(WithAlpha(Cyan, 0.55f)), radius, ImDrawFlags.None, 1.4f);
+        dl.AddRect(min + new Vector2(1.5f), max - new Vector2(1.5f), Col(new Vector4(1f, 1f, 1f, 0.08f)), radius - 1f, ImDrawFlags.None, 1f);
+
+        const float tenthMul = 1.42f;
+        var unit = (max.X - min.X) / (9f + tenthMul + 1f);
+        var x = min.X;
+        for (var i = 0; i < frames.Count; i++)
+        {
+            var w = i == 9 ? unit * tenthMul : unit;
+            DrawSheetFrame(dl, new Vector2(x, min.Y), new Vector2(x + w, max.Y), frames[i], complete);
+            x += w;
+            dl.AddLine(new Vector2(x, min.Y + 6f), new Vector2(x, max.Y - 6f), Col(WithAlpha(Cyan, 0.22f)), 1f);
+        }
+
+        DrawSheetTotal(dl, new Vector2(x, min.Y), max, gameTotal);
+    }
+
+    private static void DrawSheetFrame(ImDrawListPtr dl, Vector2 min, Vector2 max, FrameView frame, bool complete)
+    {
+        var current = frame.IsCurrent && !complete;
+        if (current)
+        {
+            var pulse = 0.16f + (0.10f * MathF.Sin((float)ImGui.GetTime() * 3.1f));
+            dl.AddRectFilled(min, max, Col(WithAlpha(Magenta, pulse)), 0f);
+        }
+
+        var header = frame.Number.ToString();
+        dl.AddText(new Vector2(min.X + 6f, min.Y + 4f), Col(current ? Ice : Mix(Cyan, Muted, 0.25f)), header);
+
+        var boxes = frame.Number == 10 ? 3 : 2;
+        var box = 16f;
+        var boxTop = min.Y + 4f;
+        var labels = frame.Number == 10
+            ? new[] { frame.Roll1, frame.Roll2, frame.Roll3 }
+            : new[] { frame.Roll1, frame.Roll2 };
+        if (frame.Number != 10 && frame.IsStrike)
+            labels = new[] { string.Empty, "X" };
+
+        for (var b = 0; b < boxes; b++)
+        {
+            var bx = max.X - 5f - ((boxes - b) * box);
+            var bMin = new Vector2(bx, boxTop);
+            var bMax = new Vector2(bx + box, boxTop + box);
+            dl.AddRectFilled(bMin, bMax, Col(new Vector4(0.04f, 0.01f, 0.08f, 0.85f)), 2f);
+            dl.AddRect(bMin, bMax, Col(WithAlpha(Ice, 0.35f)), 2f, ImDrawFlags.None, 1f);
+            var mark = b < labels.Length ? labels[b] : string.Empty;
+            if (string.IsNullOrEmpty(mark))
+                continue;
+            var ms = ImGui.CalcTextSize(mark);
+            var ink = mark is "X" or "/" ? Gold : Ice;
+            dl.AddText(new Vector2(bx + ((box - ms.X) * 0.5f), boxTop + ((box - ms.Y) * 0.5f) - 1f), Col(ink), mark);
+        }
+
+        dl.AddLine(new Vector2(min.X + 5f, min.Y + 24f), new Vector2(max.X - 5f, min.Y + 24f), Col(WithAlpha(Cyan, 0.18f)), 1f);
+
+        var score = frame.CumulativeScore?.ToString() ?? string.Empty;
+        if (score.Length == 0)
+            return;
+        var ss = ImGui.CalcTextSize(score);
+        dl.AddText(
+            new Vector2(min.X + (((max.X - min.X) - ss.X) * 0.5f), min.Y + 40f),
+            Col(current ? Ice : Gold),
+            score);
+    }
+
+    private static void DrawSheetTotal(ImDrawListPtr dl, Vector2 min, Vector2 max, int gameTotal)
+    {
+        var header = "TOT";
+        var hs = ImGui.CalcTextSize(header);
+        dl.AddText(new Vector2(min.X + (((max.X - min.X) - hs.X) * 0.5f), min.Y + 6f), Col(Gold), header);
+        var score = gameTotal.ToString();
+        var ss = ImGui.CalcTextSize(score);
+        dl.AddText(new Vector2(min.X + (((max.X - min.X) - ss.X) * 0.5f), min.Y + 38f), Col(Gold), score);
+    }
+
+    public static void ClockPip(string label, bool done, bool current)
+    {
+        var textSize = ImGui.CalcTextSize(label);
+        var size = new Vector2(MathF.Max(28f, textSize.X + 14f), 24f);
+        ImGui.Dummy(size);
+        var min = ImGui.GetItemRectMin();
+        var max = ImGui.GetItemRectMax();
+        var dl = ImGui.GetWindowDrawList();
+        var accent = done ? Gold : current ? Magenta : Mix(Muted, Ice, 0.15f);
+        var punch = current ? 0.55f : done ? 0.32f : 0.08f;
+        DrawRaisedPill(dl, min, max, accent, filled: done || current, hovered: false, held: false, punch, radius: 8f);
+        var pos = min + ((size - textSize) * 0.5f);
+        dl.AddText(pos, Col(done || current ? Ice : Muted), label);
+    }
+
+    private static void DrawRaisedPill(ImDrawListPtr dl, Vector2 min, Vector2 max, Vector4 glow, bool filled, bool hovered, bool held, float punch = 0.18f, float radius = -1f)
+    {
+        var dim = ImGui.GetStyle().Alpha;
+        var h = max.Y - min.Y;
+        var r = radius < 0f ? h * 0.5f : radius;
+        var press = held ? 1.5f : 0f;
+        min += new Vector2(0f, press);
+        max += new Vector2(0f, press);
+
+        var shade = held ? 0.18f : 0.48f;
+        if (!held)
+            dl.AddRectFilled(min + new Vector2(0f, 3.5f), max + new Vector2(0.5f, 5f), Col(new Vector4(0f, 0f, 0f, shade * dim)), r);
+
+        var lift = hovered && !held ? 0.34f : held ? 0.16f : 0.24f;
+        var top = Mix(new Vector4(0.22f, 0.10f, 0.32f, 1f), glow, lift + 0.12f);
+        var bot = Mix(new Vector4(0.07f, 0.02f, 0.12f, 1f), glow, lift * 0.45f);
+        if (filled)
+        {
+            top = Mix(top, glow, hovered ? punch + 0.12f : punch);
+            bot = Mix(bot, glow, punch * 0.72f);
+        }
+
+        dl.AddRectFilled(min, max, Col(WithAlpha(bot, dim)), r);
+        dl.AddRectFilled(min, new Vector2(max.X, min.Y + (h * 0.55f)), Col(WithAlpha(top, dim)), r, ImDrawFlags.RoundCornersTop);
+        dl.AddLine(
+            new Vector2(min.X + r, min.Y + 2.2f),
+            new Vector2(max.X - r, min.Y + 2.2f),
+            Col(new Vector4(1f, 1f, 1f, (hovered ? 0.28f : 0.16f) * dim)),
+            1.6f);
+        dl.AddRect(min, max, Col(WithAlpha(Mix(glow, Ice, 0.2f), (hovered ? 0.95f : 0.72f) * dim)), r, ImDrawFlags.None, 1.25f);
+        dl.AddRect(min + new Vector2(1.4f), max - new Vector2(1.4f), Col(new Vector4(1f, 1f, 1f, 0.10f * dim)), MathF.Max(2f, r - 1.4f), ImDrawFlags.None, 1f);
     }
 
     public static void GlowSeparator()
@@ -321,12 +507,12 @@ internal static class NeonTheme
     {
         var start = ImGui.GetCursorScreenPos();
         var width = ImGui.GetContentRegionAvail().X;
-        const float height = 28f;
+        const float height = 32f;
         const float bottomPad = 10f;
         var dl = ImGui.GetWindowDrawList();
-        dl.AddRectFilled(start, start + new Vector2(width, height), Col(new Vector4(0.10f, 0.03f, 0.18f, 0.88f)), 10f);
-        dl.AddRect(start, start + new Vector2(width, height), Col(WithAlpha(Magenta, 0.55f)), 10f, ImDrawFlags.None, 1.2f);
-        dl.AddText(start + new Vector2(12f, 6f), Col(Magenta), text);
+        var max = start + new Vector2(width, height);
+        DrawRaisedPill(dl, start, max, NeonPink, filled: true, hovered: false, held: false, punch: 0.78f);
+        dl.AddText(start + new Vector2(16f, 8f), Col(new Vector4(1f, 0.92f, 0.98f, 1f)), text);
         ImGui.Dummy(new Vector2(width, height + bottomPad));
     }
 
