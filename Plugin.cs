@@ -217,6 +217,10 @@ public sealed class BowlingWindow : Window, IDisposable
     private readonly IFontHandle labelFont;
     private readonly IFontHandle tabFont;
     private readonly ISharedImmediateTexture? logo;
+    private readonly ISharedImmediateTexture? ballPin;
+    private readonly ISharedImmediateTexture? dartsArt;
+    private readonly ISharedImmediateTexture? billiardsArt;
+    private readonly ISharedImmediateTexture? jukeboxArt;
     private readonly PartyLanes lanes = new();
     private string status = "Walk up. Tell us you're ready to dominate the lanes.";
     private string guestName = string.Empty;
@@ -233,14 +237,20 @@ public sealed class BowlingWindow : Window, IDisposable
     private bool dartClickArmed = true;
     private int houseTab;
     private bool compactHud;
-    private Vector2 savedWindowSize = new(860, 620);
-    private bool applyWindowSize;
+    private Vector2 savedWindowSize = new(860, 900);
+    private Vector2 liveWindowSize = new(860, 900);
+    private Vector2? pendingSize;
+    private Vector2? holdUntilSize;
     private string lastDartKey = string.Empty;
     private long lastDartTicks;
     private int markDart = 2;
     private ulong? lastDartId;
     private readonly ISharedImmediateTexture? menuFood;
     private readonly ISharedImmediateTexture? menuDrink;
+    private readonly NclHours hours = new();
+    private readonly IDalamudPluginInterface pluginInterface;
+    private readonly NclConfig config;
+    private long lastSizeSave;
     private const string CarrdUrl = "https://neoncelestial.carrd.co/";
     private const string BilliardsUrl = "https://bloob.io/8ballpool";
     private const string AetherphoneUrl = "https://aetherphone.net/";
@@ -255,6 +265,8 @@ public sealed class BowlingWindow : Window, IDisposable
         IUnlockState unlockState)
         : base("NCL Bowling Score", ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse)
     {
+        this.pluginInterface = pluginInterface;
+        this.config = pluginInterface.GetPluginConfig() as NclConfig ?? new NclConfig();
         this.partyList = partyList;
         this.objectTable = objectTable;
         this.playerState = playerState;
@@ -263,6 +275,10 @@ public sealed class BowlingWindow : Window, IDisposable
         var dir = pluginInterface.AssemblyLocation.DirectoryName ?? string.Empty;
         var fontPath = Path.Combine(dir, "Assets", "LuckiestGuy-Regular.ttf");
         var logoPath = Path.Combine(dir, "Assets", "ncl-logo.png");
+        var ballPinPath = Path.Combine(dir, "Assets", "ncl-ball-pin.png");
+        var dartsArtPath = Path.Combine(dir, "Assets", "ncl-darts-neon.png");
+        var billiardsArtPath = Path.Combine(dir, "Assets", "ncl-billiards-neon.png");
+        var jukeboxArtPath = Path.Combine(dir, "Assets", "ncl-jukebox-neon.png");
         var foodPath = Path.Combine(dir, "Assets", "menu-food.jpg");
         var drinkPath = Path.Combine(dir, "Assets", "menu-drink.jpg");
         this.labelFont = pluginInterface.UiBuilder.FontAtlas.NewDelegateFontHandle(e => e.OnPreBuild(toolkit =>
@@ -280,28 +296,47 @@ public sealed class BowlingWindow : Window, IDisposable
                 toolkit.AddDalamudDefaultFont(15);
         }));
         this.logo = File.Exists(logoPath) ? textureProvider.GetFromFile(logoPath) : null;
+        this.ballPin = File.Exists(ballPinPath) ? textureProvider.GetFromFile(ballPinPath) : null;
+        this.dartsArt = File.Exists(dartsArtPath) ? textureProvider.GetFromFile(dartsArtPath) : null;
+        this.billiardsArt = File.Exists(billiardsArtPath) ? textureProvider.GetFromFile(billiardsArtPath) : null;
+        this.jukeboxArt = File.Exists(jukeboxArtPath) ? textureProvider.GetFromFile(jukeboxArtPath) : null;
         this.menuFood = File.Exists(foodPath) ? textureProvider.GetFromFile(foodPath) : null;
         this.menuDrink = File.Exists(drinkPath) ? textureProvider.GetFromFile(drinkPath) : null;
-        this.Size = new Vector2(860, 620);
-        this.SizeCondition = ImGuiCond.FirstUseEver;
+        this.savedWindowSize = EvenSize(new Vector2(this.config.FullWidth, this.config.FullHeight));
+        this.liveWindowSize = this.savedWindowSize;
+        this.Size = this.savedWindowSize;
+        this.pendingSize = this.savedWindowSize;
+        this.SizeCondition = ImGuiCond.Always;
         this.SizeConstraints = FullWindowLimits;
     }
 
     private static readonly WindowSizeConstraints FullWindowLimits = new()
     {
-        MinimumSize = new Vector2(720, 380),
+        MinimumSize = new Vector2(540, 280),
         MaximumSize = new Vector2(1400, 980)
     };
 
     private static readonly WindowSizeConstraints CompactWindowLimits = new()
     {
-        MinimumSize = new Vector2(340, 140),
+        MinimumSize = new Vector2(420, 200),
         MaximumSize = new Vector2(900, 720)
     };
 
     public override void PreDraw()
     {
         this.SizeConstraints = this.compactHud ? CompactWindowLimits : FullWindowLimits;
+        var target = this.pendingSize ?? this.holdUntilSize;
+        if (target is Vector2 size)
+        {
+            this.Size = size;
+            this.SizeCondition = ImGuiCond.Always;
+            this.holdUntilSize = size;
+            this.pendingSize = null;
+        }
+        else
+        {
+            this.SizeCondition = ImGuiCond.Appearing;
+        }
     }
 
     public bool HandleChat(string text, string? sender = null)
@@ -333,14 +368,20 @@ public sealed class BowlingWindow : Window, IDisposable
     {
         this.SyncRoster();
         this.FlushPendingChat();
+        this.liveWindowSize = ImGui.GetWindowSize();
+        if (this.holdUntilSize is Vector2 target)
+        {
+            ImGui.SetWindowSize(target);
+            if (MathF.Abs(this.liveWindowSize.X - target.X) < 8f && MathF.Abs(this.liveWindowSize.Y - target.Y) < 8f)
+                this.holdUntilSize = null;
+        }
+        else if (!this.compactHud)
+        {
+            this.RememberFullSize(this.liveWindowSize);
+        }
 
         NeonTheme.Push();
         NeonTheme.DrawBackdrop();
-        if (this.applyWindowSize)
-        {
-            ImGui.SetWindowSize(this.compactHud ? new Vector2(460, 220) : this.savedWindowSize);
-            this.applyWindowSize = false;
-        }
 
         if (this.compactHud)
         {
@@ -349,7 +390,7 @@ public sealed class BowlingWindow : Window, IDisposable
             return;
         }
 
-        NeonTheme.BrandHeader(this.logo?.GetWrapOrEmpty(), this.labelFont);
+        NeonTheme.BrandHeader(this.logo?.GetWrapOrEmpty(), this.labelFont, this.hours.Line());
 
         this.tabFont.Push();
         this.houseTab = NeonTheme.GlowTabBar(["BOWLING", "DARTS", "BILLIARDS", "JUKEBOX", "MENU", "CARRD"], this.houseTab);
@@ -362,6 +403,7 @@ public sealed class BowlingWindow : Window, IDisposable
         var bodyH = pinStatus ? MathF.Max(1f, avail - barH - gap) : MathF.Max(1f, avail);
 
         ImGui.BeginChild("ncl_body", new Vector2(0f, bodyH), false, ImGuiWindowFlags.NoScrollbar);
+        ImGui.Dummy(new Vector2(0f, 8f));
         switch (this.houseTab)
         {
             case 1:
@@ -403,13 +445,47 @@ public sealed class BowlingWindow : Window, IDisposable
 
         if (on)
         {
-            this.savedWindowSize = ImGui.GetWindowSize();
+            this.RememberFullSize(this.liveWindowSize);
             if (this.houseTab > 1)
                 this.houseTab = 0;
+            this.pendingSize = this.MiniWindowSize();
+        }
+        else
+        {
+            this.pendingSize = this.savedWindowSize;
         }
 
         this.compactHud = on;
-        this.applyWindowSize = true;
+    }
+
+    private void RememberFullSize(Vector2 size)
+    {
+        size = EvenSize(size);
+        if (size.X < 200f || size.Y < 160f)
+            return;
+
+        this.savedWindowSize = size;
+        var now = Environment.TickCount64;
+        if (now - this.lastSizeSave < 400)
+            return;
+        if (Math.Abs(this.config.FullWidth - size.X) < 1f && Math.Abs(this.config.FullHeight - size.Y) < 1f)
+            return;
+
+        this.lastSizeSave = now;
+        this.config.FullWidth = size.X;
+        this.config.FullHeight = size.Y;
+        this.pluginInterface.SavePluginConfig(this.config);
+    }
+
+    private static Vector2 EvenSize(Vector2 size) =>
+        new(MathF.Round(size.X * 0.5f) * 2f, MathF.Round(size.Y * 0.5f) * 2f);
+
+    private Vector2 MiniWindowSize()
+    {
+        var rows = Math.Max(1, this.lanes.PresentCount);
+        var height = 188f + (rows * 50f);
+        height = Math.Clamp(height, 240f, 380f);
+        return new Vector2(540f, height);
     }
 
     private void DrawCompactHud()
@@ -674,6 +750,8 @@ public sealed class BowlingWindow : Window, IDisposable
         if (NeonTheme.GlowButton("  MINI  ", NeonTheme.Purple))
             this.SetCompact(true);
 
+        NeonTheme.DrawBallAndPin(this.ballPin?.GetWrapOrEmpty());
+
         ImGui.PopStyleColor();
         this.labelFont.Pop();
 
@@ -792,6 +870,8 @@ public sealed class BowlingWindow : Window, IDisposable
         if (NeonTheme.GlowButton("  MINI  ", NeonTheme.Purple))
             this.SetCompact(true);
 
+        NeonTheme.DrawBallAndPin(this.dartsArt?.GetWrapOrEmpty(), 24f);
+
         ImGui.PopStyleColor();
         this.labelFont.Pop();
 
@@ -868,6 +948,14 @@ public sealed class BowlingWindow : Window, IDisposable
 
     private void DrawBilliardsTab()
     {
+        var origin = ImGui.GetCursorScreenPos();
+        var avail = ImGui.GetContentRegionAvail().X;
+        const float artW = 328f;
+        NeonTheme.DrawOverlayArt(
+            this.billiardsArt?.GetWrapOrEmpty(),
+            new Vector2(origin.X + avail - artW - 38f, origin.Y + 200f),
+            artW);
+
         this.tabFont.Push();
         ImGui.TextColored(NeonTheme.Gold, "NEON CELESTIAL LANES  ·  BILLIARDS");
         this.tabFont.Pop();
@@ -904,6 +992,14 @@ public sealed class BowlingWindow : Window, IDisposable
 
     private void DrawJukeboxTab()
     {
+        var origin = ImGui.GetCursorScreenPos();
+        var avail = ImGui.GetContentRegionAvail().X;
+        const float artW = 248f;
+        NeonTheme.DrawOverlayArt(
+            this.jukeboxArt?.GetWrapOrEmpty(),
+            new Vector2(origin.X + avail - artW - 36f, origin.Y + 268f),
+            artW);
+
         this.tabFont.Push();
         ImGui.TextColored(NeonTheme.Magenta, "NEON CELESTIAL LANES  ·  JUKEBOX");
         this.tabFont.Pop();
@@ -1715,6 +1811,10 @@ public sealed class BowlingWindow : Window, IDisposable
 
     public void Dispose()
     {
+        this.config.FullWidth = this.savedWindowSize.X;
+        this.config.FullHeight = this.savedWindowSize.Y;
+        this.pluginInterface.SavePluginConfig(this.config);
+        this.hours.Dispose();
         this.labelFont.Dispose();
         this.tabFont.Dispose();
     }

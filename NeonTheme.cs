@@ -3,6 +3,7 @@ using System.Numerics;
 using Dalamud.Bindings.ImGui;
 using Dalamud.Interface.ManagedFontAtlas;
 using Dalamud.Interface.Textures.TextureWraps;
+using Dalamud.Utility;
 
 namespace FFXIVBowling;
 
@@ -203,7 +204,7 @@ internal static class NeonTheme
         }
     }
 
-    public static void BrandHeader(IDalamudTextureWrap? logo, IFontHandle? labelFont = null)
+    public static void BrandHeader(IDalamudTextureWrap? logo, IFontHandle? labelFont = null, string? hours = null)
     {
         var start = ImGui.GetCursorScreenPos();
         var width = ImGui.GetContentRegionAvail().X;
@@ -240,13 +241,57 @@ internal static class NeonTheme
         dl.AddRect(start, end, Col(Cyan), 14f, ImDrawFlags.None, 1.9f);
         dl.AddRect(start + new Vector2(2.6f, 2.6f), end - new Vector2(2.6f, 2.6f), Col(WithAlpha(Magenta, 0.45f)), 12f, ImDrawFlags.None, 1.3f);
 
-        var logoH = 88f;
-        var logoW = 157f;
+        var logoH = 92f;
+        var logoW = 142f;
         if (logo is not null && logo.Handle != nint.Zero && logo.Width > 0 && logo.Height > 0)
             logoW = logoH * logo.Width / logo.Height;
 
-        var logoX = start.X + 12f;
-        var logoY = start.Y + ((height - logoH) * 0.5f);
+        var logoX = start.X + ((width - logoW) * 0.5f);
+        var logoY = start.Y + ((height - logoH) * 0.5f) - 6f;
+
+        const string name = "NEON CELESTIAL LANES";
+        const string sub = "GOBLIN  ·  LB W17 P21  ·  OPEN BOWL";
+        var hoursLine = string.IsNullOrWhiteSpace(hours) ? string.Empty : hours;
+        Vector2 hoursMin = default;
+        Vector2 hoursMax = default;
+        void DrawHeaderWords()
+        {
+            var nameSize = ImGui.CalcTextSize(name);
+            var subSize = ImGui.CalcTextSize(sub);
+            var hoursSize = hoursLine.Length == 0 ? Vector2.Zero : ImGui.CalcTextSize(hoursLine);
+            var gap = 2f;
+            var blockH = nameSize.Y + gap + subSize.Y + (hoursSize.Y > 0 ? gap + hoursSize.Y : 0f);
+            var textX = start.X + 16f;
+            var textY = start.Y + ((height - blockH) * 0.5f) - 4f;
+            dl.AddText(new Vector2(textX, textY), Col(Cyan), name);
+            dl.AddText(new Vector2(textX, textY + nameSize.Y + gap), Col(Magenta), sub);
+            if (hoursSize.Y <= 0)
+                return;
+            var hoursPos = new Vector2(textX, textY + nameSize.Y + gap + subSize.Y + gap);
+            hoursMin = hoursPos;
+            hoursMax = hoursPos + hoursSize;
+            dl.AddText(hoursPos, Col(Gold), hoursLine);
+        }
+
+        if (labelFont is not null)
+        {
+            using (labelFont.Push())
+                DrawHeaderWords();
+        }
+        else
+        {
+            DrawHeaderWords();
+        }
+
+        if (hoursLine.Length > 0 && hoursMax.X > hoursMin.X)
+        {
+            ImGui.SetCursorScreenPos(hoursMin);
+            if (ImGui.InvisibleButton("##ncl_hours", hoursMax - hoursMin))
+                Util.OpenLink(NclHours.PageUrl);
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Hours from FFXIV Venues");
+        }
+
         if (logo is not null && logo.Handle != nint.Zero)
         {
             ImGui.SetCursorScreenPos(new Vector2(logoX, logoY));
@@ -254,20 +299,8 @@ internal static class NeonTheme
         }
 
         DrawBowlingBall(dl, new Vector2(end.X - 48f, start.Y + 42f), 16f, time);
-        DrawSpark(dl, new Vector2(logoX + logoW + 8f, logoY + 14f), 5.5f, Gold);
-        DrawSpark(dl, new Vector2(logoX + logoW + 22f, logoY + 6f), 3.2f, Ice);
-
-        const string sub = "GOBLIN  ·  LB W17 P21  ·  OPEN BOWL";
-        var subPos = new Vector2(logoX + logoW + 16f, start.Y + (height * 0.5f) - 8f);
-        if (labelFont is not null)
-        {
-            using (labelFont.Push())
-                dl.AddText(subPos, Col(Magenta), sub);
-        }
-        else
-        {
-            dl.AddText(subPos, Col(Magenta), sub);
-        }
+        DrawSpark(dl, new Vector2(logoX + logoW - 8f, logoY + 10f), 5.5f, Gold);
+        DrawSpark(dl, new Vector2(logoX + logoW + 8f, logoY + 4f), 3.2f, Ice);
 
         ImGui.SetCursorScreenPos(start);
         ImGui.Dummy(new Vector2(width, height + 8f));
@@ -369,6 +402,37 @@ internal static class NeonTheme
         dl.AddText(textPos, Col(WithAlpha(White, dim)), text);
         ImGui.PopID();
         return clicked;
+    }
+
+    public static void DrawBallAndPin(IDalamudTextureWrap? art, float extraLift = 0f)
+    {
+        ImGui.SameLine(0, 12f);
+        var remain = ImGui.GetContentRegionAvail().X;
+        var lineH = ImGui.GetItemRectSize().Y;
+        ImGui.Dummy(new Vector2(MathF.Max(1f, remain), lineH));
+        if (remain < 48f || art is null || art.Handle == nint.Zero || art.Width <= 0 || art.Height <= 0)
+            return;
+
+        var min = ImGui.GetItemRectMin();
+        const float pad = 6f;
+        const float lift = 34f;
+        const float boxH = 152f;
+        var fitW = remain - (pad * 2f);
+        var fitH = boxH - (pad * 2f);
+        var scale = MathF.Min(fitW / art.Width, fitH / art.Height);
+        var w = art.Width * scale;
+        var h = art.Height * scale;
+        var pos = new Vector2(min.X + ((remain - w) * 0.5f), min.Y - lift - extraLift);
+        ImGui.GetWindowDrawList().AddImage(art.Handle, pos, pos + new Vector2(w, h));
+    }
+
+    public static void DrawOverlayArt(IDalamudTextureWrap? art, Vector2 topLeft, float width)
+    {
+        if (art is null || art.Handle == nint.Zero || art.Width <= 0 || art.Height <= 0 || width < 8f)
+            return;
+
+        var h = width * art.Height / art.Width;
+        ImGui.GetWindowDrawList().AddImage(art.Handle, topLeft, topLeft + new Vector2(width, h));
     }
 
     public static bool Chip(string label, Vector4 glow)
