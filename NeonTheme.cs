@@ -91,8 +91,8 @@ internal static class NeonTheme
         ImGui.PushStyleVar(ImGuiStyleVar.WindowBorderSize, 0f);
         ImGui.PushStyleVar(ImGuiStyleVar.ChildBorderSize, 0f);
         ImGui.PushStyleVar(ImGuiStyleVar.FrameBorderSize, 1.6f);
-        ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, new Vector2(14f, 10f));
-        ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(12f, 10f));
+        ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, new Vector2(12f, 10f));
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(18f, 16f));
         ImGui.PushStyleVar(ImGuiStyleVar.FramePadding, new Vector2(12f, 5f));
         ImGui.PushStyleVar(ImGuiStyleVar.CellPadding, new Vector2(6f, 7f));
 
@@ -261,7 +261,7 @@ internal static class NeonTheme
             var hoursSize = hoursLine.Length == 0 ? Vector2.Zero : ImGui.CalcTextSize(hoursLine);
             var gap = 2f;
             var blockH = nameSize.Y + gap + subSize.Y + (hoursSize.Y > 0 ? gap + hoursSize.Y : 0f);
-            var textX = start.X + 22f;
+            var textX = start.X + 16f;
             var textY = start.Y + ((height - blockH) * 0.5f) - 4f;
             dl.AddText(new Vector2(textX, textY), Col(Cyan), name);
             dl.AddText(new Vector2(textX, textY + nameSize.Y + gap), Col(Magenta), sub);
@@ -724,10 +724,7 @@ internal static class NeonTheme
     public static void BeginLaneCard(ulong id, bool isTurn)
     {
         ImGui.PushID((int)id);
-        const float inset = 10f;
-        ImGui.Dummy(new Vector2(inset, 0f));
-        ImGui.SameLine(0, 0);
-        var width = MathF.Max(80f, ImGui.GetContentRegionAvail().X - inset);
+        var width = ImGui.GetContentRegionAvail().X;
         ImGui.BeginGroup();
         ImGui.Dummy(new Vector2(width, 1f));
         laneCardRight = ImGui.GetItemRectMax().X;
@@ -738,8 +735,8 @@ internal static class NeonTheme
     {
         ImGui.Dummy(new Vector2(0f, 6f));
         ImGui.EndGroup();
-        var min = ImGui.GetItemRectMin() - new Vector2(8f, 6f);
-        var max = new Vector2(Math.Max(ImGui.GetItemRectMax().X, laneCardRight) + 8f, ImGui.GetItemRectMax().Y + 8f);
+        var min = ImGui.GetItemRectMin() - new Vector2(10f, 6f);
+        var max = new Vector2(Math.Max(ImGui.GetItemRectMax().X, laneCardRight) + 10f, ImGui.GetItemRectMax().Y + 8f);
         var dl = ImGui.GetWindowDrawList();
         var accent = isTurn ? Magenta : Cyan;
         dl.AddRect(min - new Vector2(3f), max + new Vector2(3f), Col(WithAlpha(accent, 0.16f)), 16f, ImDrawFlags.None, 5.5f);
