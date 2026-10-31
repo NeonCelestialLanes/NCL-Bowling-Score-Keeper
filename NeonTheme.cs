@@ -37,18 +37,48 @@ internal static class NeonTheme
 
     private static readonly (float X, float Y, float R, Vector4 Color)[] Stars =
     {
-        (0.06f, 0.12f, 3.4f, Gold),
-        (0.18f, 0.07f, 2.2f, Magenta),
-        (0.33f, 0.14f, 3.8f, Ice),
-        (0.52f, 0.06f, 2.0f, Cyan),
-        (0.71f, 0.11f, 3.1f, Magenta),
-        (0.89f, 0.08f, 2.6f, Gold),
-        (0.11f, 0.38f, 1.8f, Cyan),
-        (0.91f, 0.44f, 2.1f, Magenta),
-        (0.08f, 0.78f, 2.4f, Cyan),
-        (0.41f, 0.90f, 1.8f, Magenta),
-        (0.68f, 0.86f, 2.8f, Gold),
-        (0.93f, 0.80f, 2.0f, Ice),
+        (0.05f, 0.10f, 3.6f, Gold),
+        (0.14f, 0.06f, 2.0f, Magenta),
+        (0.22f, 0.16f, 2.8f, Ice),
+        (0.31f, 0.08f, 1.7f, Cyan),
+        (0.41f, 0.13f, 3.4f, Magenta),
+        (0.52f, 0.05f, 2.2f, Gold),
+        (0.63f, 0.15f, 1.9f, Cyan),
+        (0.74f, 0.07f, 3.0f, Magenta),
+        (0.84f, 0.12f, 2.4f, Ice),
+        (0.93f, 0.06f, 2.8f, Gold),
+        (0.08f, 0.28f, 1.6f, Cyan),
+        (0.19f, 0.34f, 2.5f, Magenta),
+        (0.29f, 0.24f, 1.5f, Gold),
+        (0.47f, 0.31f, 2.1f, Ice),
+        (0.58f, 0.22f, 1.8f, Magenta),
+        (0.69f, 0.36f, 2.6f, Cyan),
+        (0.81f, 0.27f, 1.7f, Gold),
+        (0.94f, 0.33f, 2.3f, Magenta),
+        (0.04f, 0.48f, 2.0f, Ice),
+        (0.16f, 0.54f, 1.5f, Cyan),
+        (0.27f, 0.45f, 2.7f, Magenta),
+        (0.38f, 0.58f, 1.8f, Gold),
+        (0.51f, 0.49f, 2.2f, Cyan),
+        (0.62f, 0.57f, 1.6f, Magenta),
+        (0.76f, 0.46f, 2.9f, Ice),
+        (0.88f, 0.53f, 1.9f, Gold),
+        (0.07f, 0.68f, 2.4f, Magenta),
+        (0.18f, 0.74f, 1.6f, Cyan),
+        (0.33f, 0.66f, 2.1f, Gold),
+        (0.44f, 0.78f, 1.7f, Ice),
+        (0.55f, 0.69f, 2.8f, Magenta),
+        (0.67f, 0.76f, 1.9f, Cyan),
+        (0.79f, 0.64f, 2.3f, Gold),
+        (0.91f, 0.72f, 1.5f, Magenta),
+        (0.06f, 0.88f, 2.6f, Cyan),
+        (0.21f, 0.92f, 1.8f, Magenta),
+        (0.36f, 0.85f, 2.2f, Gold),
+        (0.49f, 0.93f, 1.6f, Ice),
+        (0.61f, 0.87f, 3.1f, Cyan),
+        (0.73f, 0.94f, 2.0f, Magenta),
+        (0.85f, 0.84f, 2.5f, Gold),
+        (0.96f, 0.90f, 1.7f, Ice),
     };
 
     public static void Push()
@@ -112,10 +142,17 @@ internal static class NeonTheme
         dl.AddRectFilledMultiColor(
             min,
             max,
-            Col(new Vector4(0.30f, 0.06f, 0.40f, 0.96f)),
-            Col(new Vector4(0.04f, 0.14f, 0.26f, 0.94f)),
-            Col(new Vector4(0.08f, 0.02f, 0.16f, 0.98f)),
-            Col(new Vector4(0.20f, 0.03f, 0.26f, 0.96f)));
+            Col(new Vector4(0.42f, 0.08f, 0.58f, 0.98f)),
+            Col(new Vector4(0.02f, 0.42f, 0.52f, 0.96f)),
+            Col(new Vector4(0.05f, 0.02f, 0.16f, 0.98f)),
+            Col(new Vector4(0.22f, 0.05f, 0.46f, 0.97f)));
+        dl.AddRectFilledMultiColor(
+            min,
+            max,
+            Col(WithAlpha(Purple, 0.16f)),
+            Col(WithAlpha(Cyan, 0.24f)),
+            Col(WithAlpha(Gold, 0.08f)),
+            Col(WithAlpha(Purple, 0.12f)));
 
         dl.AddRectFilled(
             min,
@@ -139,11 +176,30 @@ internal static class NeonTheme
         dl.AddRect(min + new Vector2(1.5f), max - new Vector2(1.5f), Col(WithAlpha(Magenta, 0.35f)), 15f, ImDrawFlags.None, 2.4f);
         dl.AddRect(min + new Vector2(3.2f), max - new Vector2(3.2f), Col(Cyan), 14f, ImDrawFlags.None, 1.6f);
 
+        var size = max - min;
         foreach (var star in Stars)
         {
-            var pulse = 0.72f + (0.28f * MathF.Sin(time * 2.4f + star.X * 12f));
-            var pos = min + new Vector2(star.X * (max.X - min.X), star.Y * (max.Y - min.Y));
+            var pulse = 0.55f + (0.45f * MathF.Sin(time * 2.4f + star.X * 14f + star.Y * 9f));
+            var pos = min + new Vector2(star.X * size.X, star.Y * size.Y);
             DrawSpark(dl, pos, star.R * pulse, star.Color);
+        }
+
+        for (var i = 0; i < 28; i++)
+        {
+            var fx = Fract((i * 0.6180339f) + 0.11f);
+            var fy = Fract((i * 0.3819660f) + 0.19f);
+            var twinkle = 0.25f + (0.75f * MathF.Sin(time * (1.6f + (i % 5) * 0.35f) + i));
+            if (twinkle < 0.35f)
+                continue;
+            var dust = min + new Vector2(fx * size.X, fy * size.Y);
+            var hue = (i % 4) switch
+            {
+                0 => Cyan,
+                1 => Magenta,
+                2 => Gold,
+                _ => White,
+            };
+            dl.AddCircleFilled(dust, 1.15f * twinkle, Col(WithAlpha(hue, 0.55f * twinkle)));
         }
     }
 
@@ -508,15 +564,49 @@ internal static class NeonTheme
         var start = ImGui.GetCursorScreenPos();
         var width = ImGui.GetContentRegionAvail().X;
         const float height = 32f;
-        const float bottomPad = 10f;
         var dl = ImGui.GetWindowDrawList();
         var max = start + new Vector2(width, height);
         DrawRaisedPill(dl, start, max, NeonPink, filled: true, hovered: false, held: false, punch: 0.78f);
-        dl.AddText(start + new Vector2(16f, 8f), Col(new Vector4(1f, 0.92f, 0.98f, 1f)), text);
-        ImGui.Dummy(new Vector2(width, height + bottomPad));
+        var labelSize = ImGui.CalcTextSize(text);
+        dl.AddText(start + new Vector2(16f, (height - labelSize.Y) * 0.5f), Col(new Vector4(1f, 0.92f, 0.98f, 1f)), text);
+        ImGui.Dummy(new Vector2(width, height));
     }
 
+    [ThreadStatic] private static Vector2 trayOrigin;
+    [ThreadStatic] private static float trayWidth;
     [ThreadStatic] private static float laneCardRight;
+
+    public static void BeginInsetBar()
+    {
+        ImGui.Dummy(new Vector2(0f, 4f));
+        trayOrigin = ImGui.GetCursorScreenPos();
+        trayWidth = ImGui.GetContentRegionAvail().X;
+        var dl = ImGui.GetWindowDrawList();
+        dl.ChannelsSplit(2);
+        dl.ChannelsSetCurrent(1);
+        ImGui.SetCursorScreenPos(trayOrigin + new Vector2(10f, 8f));
+        ImGui.BeginGroup();
+    }
+
+    public static void EndInsetBar()
+    {
+        ImGui.EndGroup();
+        var contentMin = ImGui.GetItemRectMin();
+        var contentMax = ImGui.GetItemRectMax();
+        var min = contentMin - new Vector2(10f, 8f);
+        var max = contentMax + new Vector2(10f, 8f);
+        var dl = ImGui.GetWindowDrawList();
+        dl.ChannelsSetCurrent(0);
+        var r = 16f;
+        dl.AddRectFilled(min + new Vector2(0f, 3f), max + new Vector2(0f, 4f), Col(new Vector4(0f, 0f, 0f, 0.40f)), r);
+        dl.AddRectFilled(min, max, Col(new Vector4(0.04f, 0.01f, 0.09f, 0.92f)), r);
+        dl.AddRect(min, max, Col(new Vector4(1f, 1f, 1f, 0.07f)), r, ImDrawFlags.None, 1f);
+        dl.ChannelsMerge();
+        ImGui.SetCursorScreenPos(new Vector2(trayOrigin.X, max.Y + 6f));
+        ImGui.Dummy(new Vector2(trayWidth, 1f));
+    }
+
+
 
     public static void BeginLaneCard(ulong id, bool isTurn)
     {
@@ -579,6 +669,8 @@ internal static class NeonTheme
         dl.AddLine(pos - new Vector2(d, d), pos + new Vector2(d, d), Col(WithAlpha(color, 0.75f)), 0.95f);
         dl.AddLine(pos - new Vector2(d, -d), pos + new Vector2(d, -d), Col(WithAlpha(color, 0.75f)), 0.95f);
     }
+
+    private static float Fract(float value) => value - MathF.Floor(value);
 
     private static Vector4 WithAlpha(Vector4 color, float alpha) => new(color.X, color.Y, color.Z, alpha);
 

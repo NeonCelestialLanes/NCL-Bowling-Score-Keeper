@@ -250,7 +250,7 @@ public sealed class BowlingWindow : Window, IDisposable
         ITextureProvider textureProvider,
         IDataManager dataManager,
         IUnlockState unlockState)
-        : base("NCL Bowling Score")
+        : base("NCL Bowling Score", ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse)
     {
         this.partyList = partyList;
         this.objectTable = objectTable;
@@ -326,6 +326,13 @@ public sealed class BowlingWindow : Window, IDisposable
         this.houseTab = NeonTheme.GlowTabBar(["BOWLING", "DARTS", "BILLIARDS", "JUKEBOX", "MENU", "CARRD"], this.houseTab);
         this.tabFont.Pop();
 
+        var pinStatus = this.houseTab is 0 or 1;
+        const float barH = 34f;
+        var avail = ImGui.GetContentRegionAvail().Y;
+        var gap = ImGui.GetStyle().ItemSpacing.Y;
+        var bodyH = pinStatus ? MathF.Max(1f, avail - barH - gap) : MathF.Max(1f, avail);
+
+        ImGui.BeginChild("ncl_body", new Vector2(0f, bodyH), false, ImGuiWindowFlags.NoScrollbar);
         switch (this.houseTab)
         {
             case 1:
@@ -354,7 +361,8 @@ public sealed class BowlingWindow : Window, IDisposable
                 break;
         }
 
-        if (this.houseTab is 0 or 1)
+        ImGui.EndChild();
+        if (pinStatus)
             NeonTheme.StatusBar(this.status);
         NeonTheme.Pop();
     }
@@ -397,6 +405,7 @@ public sealed class BowlingWindow : Window, IDisposable
         else if (this.lanes.PresentCount > 0)
             ImGui.TextColored(NeonTheme.Magenta, "That's the game. Bragging rights until someone beats you.");
 
+        ImGui.Dummy(new Vector2(0f, 8f));
         this.labelFont.Push();
         ImGui.PushStyleColor(ImGuiCol.Text, NeonTheme.Ice);
         var rollColor = this.awaitingLocalRoll || onCooldown ? NeonTheme.Gold : canRoll ? NeonTheme.Cyan : NeonTheme.Muted;
@@ -508,6 +517,7 @@ public sealed class BowlingWindow : Window, IDisposable
         else if (this.lanes.PresentCount > 0)
             ImGui.TextColored(NeonTheme.Magenta, "Clock's done. First one to bullseye keeps the bragging rights.");
 
+        ImGui.Dummy(new Vector2(0f, 8f));
         this.labelFont.Push();
         ImGui.PushStyleColor(ImGuiCol.Text, NeonTheme.Ice);
         var throwColor = this.awaitingLocalDart || onCooldown ? NeonTheme.Gold : canThrow ? NeonTheme.Cyan : NeonTheme.Muted;
@@ -1031,27 +1041,28 @@ public sealed class BowlingWindow : Window, IDisposable
         var canFix = onApproach is not null && !onApproach.Game.IsComplete;
         var canUndo = this.FindLastScoredLane() is not null;
 
+        NeonTheme.BeginInsetBar();
         this.labelFont.Push();
         ImGui.PushStyleColor(ImGuiCol.Text, NeonTheme.Ice);
 
         ImGui.BeginDisabled(!canFix);
-        if (NeonTheme.GlowButton("  GUTTER  ", NeonTheme.Magenta) && canFix)
+        if (NeonTheme.Chip("  GUTTER  ##gutter", NeonTheme.Magenta) && canFix)
             this.ApplyManualThrow(onApproach!, 0);
-        ImGui.SameLine();
-        if (NeonTheme.GlowButton("  PASS  ", NeonTheme.Cyan) && canFix)
+        ImGui.SameLine(0, 8f);
+        if (NeonTheme.Chip("  PASS  ##pass", NeonTheme.Cyan) && canFix)
             this.PassOpenFrame(onApproach!);
-        ImGui.SameLine();
-        if (NeonTheme.GlowButton("  SKIP  ", NeonTheme.Gold) && canFix)
+        ImGui.SameLine(0, 8f);
+        if (NeonTheme.Chip("  SKIP  ##fixskip", NeonTheme.Gold) && canFix)
             this.SkipAfk(onApproach!);
         ImGui.EndDisabled();
 
-        ImGui.SameLine();
+        ImGui.SameLine(0, 8f);
         ImGui.BeginDisabled(!canUndo);
-        if (NeonTheme.GlowButton("  UNDO  ", NeonTheme.Gold) && canUndo)
+        if (NeonTheme.Chip("  UNDO  ##undo", NeonTheme.Gold) && canUndo)
             this.UndoLastThrow();
         ImGui.EndDisabled();
 
-        ImGui.SameLine();
+        ImGui.SameLine(0, 8f);
         ImGui.SetNextItemWidth(52);
         ImGui.InputInt("##mark_pins", ref this.markPins, 0);
         if (this.markPins < 0)
@@ -1059,14 +1070,15 @@ public sealed class BowlingWindow : Window, IDisposable
         if (this.markPins > 11)
             this.markPins = 11;
 
-        ImGui.SameLine();
+        ImGui.SameLine(0, 8f);
         ImGui.BeginDisabled(!canFix);
-        if (NeonTheme.GlowButton("  MARK  ", NeonTheme.Cyan) && canFix)
+        if (NeonTheme.Chip("  MARK  ##mark", NeonTheme.Cyan) && canFix)
             this.ApplyManualThrow(onApproach!, this.markPins);
         ImGui.EndDisabled();
 
         ImGui.PopStyleColor();
         this.labelFont.Pop();
+        NeonTheme.EndInsetBar();
         ImGui.TextColored(
             NeonTheme.Muted,
             onApproach is null
@@ -1078,21 +1090,22 @@ public sealed class BowlingWindow : Window, IDisposable
     {
         var canFix = onOche is not null && !onOche.Clock.IsComplete;
 
+        NeonTheme.BeginInsetBar();
         this.labelFont.Push();
         ImGui.PushStyleColor(ImGuiCol.Text, NeonTheme.Ice);
 
         ImGui.BeginDisabled(!canFix);
-        if (NeonTheme.GlowButton("  MISS  ", NeonTheme.Magenta) && canFix)
+        if (NeonTheme.Chip("  MISS  ##dmiss", NeonTheme.Magenta) && canFix)
             this.ApplyManualDart(onOche!, 3);
-        ImGui.SameLine();
-        if (NeonTheme.GlowButton("  HIT  ", NeonTheme.Cyan) && canFix)
+        ImGui.SameLine(0, 8f);
+        if (NeonTheme.Chip("  HIT  ##dhit", NeonTheme.Cyan) && canFix)
             this.ApplyManualDart(onOche!, onOche!.Clock.IsBullseye ? 10 : 2);
-        ImGui.SameLine();
-        if (NeonTheme.GlowButton("  SKIP  ", NeonTheme.Gold) && canFix)
+        ImGui.SameLine(0, 8f);
+        if (NeonTheme.Chip("  SKIP  ##dfixskip", NeonTheme.Gold) && canFix)
             this.SkipDartAfk(onOche!);
         ImGui.EndDisabled();
 
-        ImGui.SameLine();
+        ImGui.SameLine(0, 8f);
         ImGui.SetNextItemWidth(52);
         ImGui.InputInt("##mark_dart", ref this.markDart, 0);
         if (this.markDart < 1)
@@ -1100,14 +1113,15 @@ public sealed class BowlingWindow : Window, IDisposable
         if (this.markDart > 10)
             this.markDart = 10;
 
-        ImGui.SameLine();
+        ImGui.SameLine(0, 8f);
         ImGui.BeginDisabled(!canFix);
-        if (NeonTheme.GlowButton("  MARK  ", NeonTheme.Cyan) && canFix)
+        if (NeonTheme.Chip("  MARK  ##dmark", NeonTheme.Cyan) && canFix)
             this.ApplyManualDart(onOche!, this.markDart);
         ImGui.EndDisabled();
 
         ImGui.PopStyleColor();
         this.labelFont.Pop();
+        NeonTheme.EndInsetBar();
         ImGui.TextColored(
             NeonTheme.Muted,
             onOche is null
