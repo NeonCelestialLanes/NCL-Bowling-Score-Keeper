@@ -232,6 +232,9 @@ public sealed class BowlingWindow : Window, IDisposable
     private bool awaitingLocalDart;
     private bool dartClickArmed = true;
     private int houseTab;
+    private bool compactHud;
+    private Vector2 savedWindowSize = new(860, 620);
+    private bool applyWindowSize;
     private string lastDartKey = string.Empty;
     private long lastDartTicks;
     private int markDart = 2;
@@ -281,11 +284,24 @@ public sealed class BowlingWindow : Window, IDisposable
         this.menuDrink = File.Exists(drinkPath) ? textureProvider.GetFromFile(drinkPath) : null;
         this.Size = new Vector2(860, 620);
         this.SizeCondition = ImGuiCond.FirstUseEver;
-        this.SizeConstraints = new WindowSizeConstraints
-        {
-            MinimumSize = new Vector2(720, 380),
-            MaximumSize = new Vector2(1400, 980)
-        };
+        this.SizeConstraints = FullWindowLimits;
+    }
+
+    private static readonly WindowSizeConstraints FullWindowLimits = new()
+    {
+        MinimumSize = new Vector2(720, 380),
+        MaximumSize = new Vector2(1400, 980)
+    };
+
+    private static readonly WindowSizeConstraints CompactWindowLimits = new()
+    {
+        MinimumSize = new Vector2(340, 140),
+        MaximumSize = new Vector2(900, 720)
+    };
+
+    public override void PreDraw()
+    {
+        this.SizeConstraints = this.compactHud ? CompactWindowLimits : FullWindowLimits;
     }
 
     public bool HandleChat(string text, string? sender = null)
@@ -320,6 +336,19 @@ public sealed class BowlingWindow : Window, IDisposable
 
         NeonTheme.Push();
         NeonTheme.DrawBackdrop();
+        if (this.applyWindowSize)
+        {
+            ImGui.SetWindowSize(this.compactHud ? new Vector2(460, 220) : this.savedWindowSize);
+            this.applyWindowSize = false;
+        }
+
+        if (this.compactHud)
+        {
+            this.DrawCompactHud();
+            NeonTheme.Pop();
+            return;
+        }
+
         NeonTheme.BrandHeader(this.logo?.GetWrapOrEmpty(), this.labelFont);
 
         this.tabFont.Push();
@@ -365,6 +394,200 @@ public sealed class BowlingWindow : Window, IDisposable
         if (pinStatus)
             NeonTheme.StatusBar(this.status);
         NeonTheme.Pop();
+    }
+
+    private void SetCompact(bool on)
+    {
+        if (on == this.compactHud)
+            return;
+
+        if (on)
+        {
+            this.savedWindowSize = ImGui.GetWindowSize();
+            if (this.houseTab > 1)
+                this.houseTab = 0;
+        }
+
+        this.compactHud = on;
+        this.applyWindowSize = true;
+    }
+
+    private void DrawCompactHud()
+    {
+        this.labelFont.Push();
+        ImGui.PushStyleColor(ImGuiCol.Text, NeonTheme.Ice);
+        if (NeonTheme.GlowButton("  FULL  ", NeonTheme.Purple))
+            this.SetCompact(false);
+        ImGui.SameLine();
+        if (NeonTheme.GlowButton(this.houseTab == 1 ? "  DARTS  " : "  BOWLING  ", NeonTheme.Cyan))
+            this.houseTab = this.houseTab == 1 ? 0 : 1;
+        ImGui.PopStyleColor();
+        this.labelFont.Pop();
+
+        if (!NclVenue.IsAt(this.playerState))
+        {
+            this.DrawVenueLock(this.houseTab == 1 ? "then throw." : "then bowl.");
+            return;
+        }
+
+        if (this.houseTab == 1)
+            this.DrawCompactDarts();
+        else
+            this.DrawCompactBowling();
+
+        ImGui.TextColored(NeonTheme.Muted, this.status);
+    }
+
+    private void DrawCompactBowling()
+    {
+        var local = this.LocalLane();
+        var onApproach = this.lanes.WhoseTurn();
+        var localDone = local?.Game.IsComplete == true;
+        var localTurn = local is not null && onApproach is not null && ReferenceEquals(onApproach, local);
+        if (!ImGui.IsMouseDown(ImGuiMouseButton.Left))
+            this.rollClickArmed = true;
+
+        var cooldownMs = this.commandReadyAt - Environment.TickCount64;
+        var onCooldown = cooldownMs > 0;
+        var canRoll = localTurn && !localDone && !this.awaitingLocalRoll && this.rollClickArmed && !onCooldown;
+
+        if (onApproach is not null)
+            ImGui.TextColored(NeonTheme.Gold, $"Up: {onApproach.Name}");
+        else if (this.lanes.PresentCount > 0)
+            ImGui.TextColored(NeonTheme.Magenta, "That's the game.");
+
+        this.labelFont.Push();
+        ImGui.PushStyleColor(ImGuiCol.Text, NeonTheme.Ice);
+        var rollColor = this.awaitingLocalRoll || onCooldown ? NeonTheme.Gold : canRoll ? NeonTheme.Cyan : NeonTheme.Muted;
+        var rollLabel = this.awaitingLocalRoll
+            ? "  WAITING…  ##miniroll"
+            : onCooldown
+                ? $"  WAIT {cooldownMs / 1000f:0.0}s  ##miniroll"
+                : localDone
+                    ? "  GAME OVER  ##miniroll"
+                    : !localTurn
+                        ? "  WAIT  ##miniroll"
+                        : "  ROLL BALL  ##miniroll";
+        ImGui.BeginDisabled(!canRoll);
+        var clicked = NeonTheme.GlowButton(rollLabel, rollColor);
+        ImGui.EndDisabled();
+        ImGui.SameLine();
+        if (NeonTheme.GlowButton("  NEW GAME  ##mininew", NeonTheme.Magenta))
+        {
+            this.lanes.ResetVisible();
+            this.awaitingLocalRoll = false;
+            this.rollClickArmed = true;
+            this.outgoing.Clear();
+            this.commandReadyAt = 0;
+            this.lastScoredId = null;
+            this.status = "Fresh lanes. Don't choke.";
+        }
+
+        ImGui.PopStyleColor();
+        this.labelFont.Pop();
+        if (clicked && canRoll)
+        {
+            this.rollClickArmed = false;
+            this.awaitingLocalRoll = true;
+            this.EnqueueChat(this.RollCommand());
+            this.status = $"Bowling… {local!.Game.RemainingPins} standing.";
+        }
+
+        if (!ImGui.BeginChild("mini_lanes", new Vector2(0f, -22f), false))
+        {
+            ImGui.EndChild();
+            return;
+        }
+
+        foreach (var lane in this.lanes.Visible)
+        {
+            var isTurn = onApproach is not null && ReferenceEquals(onApproach, lane);
+            var tag = lane.IsLocal ? "YOU" : lane.IsManual ? "GUEST" : string.Empty;
+            var name = string.IsNullOrEmpty(tag) ? lane.Name : $"{lane.Name}  {tag}";
+            ImGui.TextColored(isTurn ? NeonTheme.Gold : NeonTheme.Ice, name);
+            NeonTheme.MiniSheet(lane.Game.GetFrames(), lane.Game.TotalScore, lane.Game.IsComplete);
+        }
+
+        ImGui.EndChild();
+    }
+
+    private void DrawCompactDarts()
+    {
+        var local = this.LocalLane();
+        var onOche = this.lanes.WhoseDartTurn();
+        var localDone = local?.Clock.IsComplete == true;
+        var localTurn = local is not null && onOche is not null && ReferenceEquals(onOche, local);
+        if (!ImGui.IsMouseDown(ImGuiMouseButton.Left))
+            this.dartClickArmed = true;
+
+        var cooldownMs = this.commandReadyAt - Environment.TickCount64;
+        var onCooldown = cooldownMs > 0;
+        var canThrow = localTurn && !localDone && !this.awaitingLocalDart && this.dartClickArmed && !onCooldown;
+
+        if (onOche is not null)
+            ImGui.TextColored(NeonTheme.Gold, $"Up: {onOche.Name}  ·  {onOche.Clock.AimLabel}  ·  dart {onOche.Clock.DartsThisTurn + 1}/3");
+        else if (this.lanes.PresentCount > 0)
+            ImGui.TextColored(NeonTheme.Magenta, "Clock's done.");
+
+        this.labelFont.Push();
+        ImGui.PushStyleColor(ImGuiCol.Text, NeonTheme.Ice);
+        var throwColor = this.awaitingLocalDart || onCooldown ? NeonTheme.Gold : canThrow ? NeonTheme.Cyan : NeonTheme.Muted;
+        var throwLabel = this.awaitingLocalDart
+            ? "  WAITING…  ##minithrow"
+            : onCooldown
+                ? $"  WAIT {cooldownMs / 1000f:0.0}s  ##minithrow"
+                : localDone
+                    ? "  CLOCK DONE  ##minithrow"
+                    : !localTurn
+                        ? "  WAIT  ##minithrow"
+                        : "  THROW DART  ##minithrow";
+        ImGui.BeginDisabled(!canThrow);
+        var clicked = NeonTheme.GlowButton(throwLabel, throwColor);
+        ImGui.EndDisabled();
+        ImGui.SameLine();
+        if (NeonTheme.GlowButton("  NEW CLOCK  ##miniclock", NeonTheme.Magenta))
+        {
+            this.lanes.ResetClocks();
+            this.awaitingLocalDart = false;
+            this.dartClickArmed = true;
+            this.outgoing.Clear();
+            this.commandReadyAt = 0;
+            this.lastDartId = null;
+            this.status = "Fresh clocks. Start at 1.";
+        }
+
+        ImGui.PopStyleColor();
+        this.labelFont.Pop();
+        if (clicked && canThrow)
+        {
+            this.dartClickArmed = false;
+            this.awaitingLocalDart = true;
+            this.EnqueueDartThrow();
+            this.status = $"Darts… aiming {local!.Clock.AimLabel}.";
+        }
+
+        if (!ImGui.BeginChild("mini_clocks", new Vector2(0f, -22f), false))
+        {
+            ImGui.EndChild();
+            return;
+        }
+
+        foreach (var lane in this.lanes.Visible)
+        {
+            var isTurn = onOche is not null && ReferenceEquals(onOche, lane);
+            var clock = lane.Clock;
+            var line = clock.IsComplete
+                ? $"{lane.Name}  ·  DONE"
+                : $"{lane.Name}  ·  {clock.AimLabel}  ·  {clock.PointsEarned}/20";
+            ImGui.TextColored(isTurn ? NeonTheme.Gold : NeonTheme.Ice, line);
+            if (clock.LastTurnMarks.Count > 0)
+            {
+                ImGui.SameLine();
+                ImGui.TextColored(NeonTheme.Gold, string.Join(" ", clock.LastTurnMarks));
+            }
+        }
+
+        ImGui.EndChild();
     }
 
     private void DrawVenueLock(string verb)
@@ -446,6 +669,10 @@ public sealed class BowlingWindow : Window, IDisposable
         ImGui.SameLine();
         if (NeonTheme.GlowButton("  RULES  ", NeonTheme.Gold))
             ImGui.OpenPopup("HOUSE RULES##ncl_bowl_rules");
+
+        ImGui.SameLine();
+        if (NeonTheme.GlowButton("  MINI  ", NeonTheme.Purple))
+            this.SetCompact(true);
 
         ImGui.PopStyleColor();
         this.labelFont.Pop();
@@ -560,6 +787,10 @@ public sealed class BowlingWindow : Window, IDisposable
         ImGui.SameLine();
         if (NeonTheme.GlowButton("  RULES  ", NeonTheme.Gold))
             ImGui.OpenPopup("HOUSE RULES##ncl_dart_rules");
+
+        ImGui.SameLine();
+        if (NeonTheme.GlowButton("  MINI  ", NeonTheme.Purple))
+            this.SetCompact(true);
 
         ImGui.PopStyleColor();
         this.labelFont.Pop();

@@ -443,6 +443,55 @@ internal static class NeonTheme
         DrawSheetTotal(dl, new Vector2(x, min.Y), max, gameTotal);
     }
 
+    public static void MiniSheet(System.Collections.Generic.IReadOnlyList<FrameView> frames, int gameTotal, bool complete)
+    {
+        var avail = ImGui.GetContentRegionAvail().X;
+        const float height = 28f;
+        ImGui.Dummy(new Vector2(avail, height));
+        var min = ImGui.GetItemRectMin();
+        var max = ImGui.GetItemRectMax();
+        var dl = ImGui.GetWindowDrawList();
+        const float radius = 8f;
+        dl.AddRectFilled(min, max, Col(new Vector4(0.07f, 0.02f, 0.12f, 0.94f)), radius);
+        dl.AddRect(min, max, Col(WithAlpha(Cyan, 0.45f)), radius, ImDrawFlags.None, 1.1f);
+
+        const float tenthMul = 1.35f;
+        var unit = (max.X - min.X) / (9f + tenthMul + 0.9f);
+        var x = min.X;
+        for (var i = 0; i < frames.Count; i++)
+        {
+            var w = i == 9 ? unit * tenthMul : unit;
+            DrawMiniFrame(dl, new Vector2(x, min.Y), new Vector2(x + w, max.Y), frames[i], complete);
+            x += w;
+            dl.AddLine(new Vector2(x, min.Y + 4f), new Vector2(x, max.Y - 4f), Col(WithAlpha(Cyan, 0.18f)), 1f);
+        }
+
+        var score = gameTotal.ToString();
+        var ss = ImGui.CalcTextSize(score);
+        dl.AddText(new Vector2(x + (((max.X - x) - ss.X) * 0.5f), min.Y + ((height - ss.Y) * 0.5f)), Col(Gold), score);
+    }
+
+    private static void DrawMiniFrame(ImDrawListPtr dl, Vector2 min, Vector2 max, FrameView frame, bool complete)
+    {
+        if (frame.IsCurrent && !complete)
+            dl.AddRectFilled(min, max, Col(WithAlpha(Magenta, 0.22f)), 0f);
+
+        var marks = frame.Number == 10
+            ? JoinMini(frame.Roll1, frame.Roll2, frame.Roll3)
+            : frame.IsStrike ? "X" : JoinMini(frame.Roll1, frame.Roll2);
+        if (marks.Length == 0)
+            return;
+        var ms = ImGui.CalcTextSize(marks);
+        var ink = frame.IsStrike || frame.IsSpare ? Gold : Ice;
+        dl.AddText(new Vector2(min.X + (((max.X - min.X) - ms.X) * 0.5f), min.Y + (((max.Y - min.Y) - ms.Y) * 0.5f) - 1f), Col(ink), marks);
+    }
+
+    private static string JoinMini(params string[] parts)
+    {
+        var filled = Array.FindAll(parts, static p => !string.IsNullOrEmpty(p));
+        return filled.Length == 0 ? string.Empty : string.Join("", filled);
+    }
+
     private static void DrawSheetFrame(ImDrawListPtr dl, Vector2 min, Vector2 max, FrameView frame, bool complete)
     {
         var current = frame.IsCurrent && !complete;
