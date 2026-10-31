@@ -275,7 +275,7 @@ public sealed class BowlingWindow : Window, IDisposable
         this.objectTable = objectTable;
         this.playerState = playerState;
         this.lifestream = new LifestreamTravel(pluginInterface);
-        this.mogCast = new MogCast(commandManager);
+        this.mogCast = new MogCast(commandManager, objectTable);
         this.throwEmote = new ThrowEmote(dataManager, unlockState);
         var dir = pluginInterface.AssemblyLocation.DirectoryName ?? string.Empty;
         var fontPath = Path.Combine(dir, "Assets", "LuckiestGuy-Regular.ttf");
@@ -1006,7 +1006,7 @@ public sealed class BowlingWindow : Window, IDisposable
             artW);
 
         var atLanes = NclVenue.IsAt(this.playerState);
-        var live = this.mogCast.CanJoinAtVenue(this.playerState);
+        var live = this.mogCast.CanJoinAtVenue(this.playerState, out var hostName);
 
         this.tabFont.Push();
         ImGui.TextColored(NeonTheme.Magenta, "NEON CELESTIAL LANES  ·  JUKEBOX");
@@ -1014,10 +1014,12 @@ public sealed class BowlingWindow : Window, IDisposable
         ImGui.TextColored(
             live ? NeonTheme.Gold : NeonTheme.Muted,
             live
-                ? "LIVE at the lanes  ·  tap JOIN MOGCAST to hop on the house screen"
-                : atLanes
+                ? $"LIVE from {hostName}  ·  tap JOIN MOGCAST to hop on the house screen"
+                : atLanes && !this.mogCast.PhoneInstalled
                     ? "You're at the lanes. Install Aetherphone to join MogCast."
-                    : "LIVE lights up when you're at NCL with Aetherphone. MogCast lists nearby screens.");
+                    : atLanes
+                        ? "Jukebox is dark until Mikh, Uki, or Shin is on the house screen."
+                        : "LIVE lights up at NCL when Mikh, Uki, or Shin is casting.");
         ImGui.Dummy(new Vector2(0, 8));
 
         ImGui.TextColored(NeonTheme.Gold, "How to listen");
