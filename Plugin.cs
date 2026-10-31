@@ -399,7 +399,9 @@ public sealed class BowlingWindow : Window, IDisposable
         var onCooldown = cooldownMs > 0;
         var canRoll = localTurn && !localDone && !this.awaitingLocalRoll && this.rollClickArmed && !onCooldown;
 
+        this.tabFont.Push();
         ImGui.TextColored(NeonTheme.Cyan, this.RosterHeadline());
+        this.tabFont.Pop();
         if (onApproach is not null)
             ImGui.TextColored(NeonTheme.Gold, $"On the approach: {onApproach.Name}");
         else if (this.lanes.PresentCount > 0)
@@ -510,7 +512,9 @@ public sealed class BowlingWindow : Window, IDisposable
         var onCooldown = cooldownMs > 0;
         var canThrow = localTurn && !localDone && !this.awaitingLocalDart && this.dartClickArmed && !onCooldown;
 
+        this.tabFont.Push();
         ImGui.TextColored(NeonTheme.Cyan, "AROUND THE CLOCK  ·  1–20, then bullseye  ·  3 darts each turn");
+        this.tabFont.Pop();
         ImGui.TextColored(NeonTheme.Muted, "Even 2/4/6/8 hits a number. Odd 3/5/7/9 misses. 1 and 10 only count on bullseye.");
         if (onOche is not null)
             ImGui.TextColored(NeonTheme.Gold, $"On the oche: {onOche.Name}  ·  aiming {onOche.Clock.AimLabel}  ·  dart {onOche.Clock.DartsThisTurn + 1}/3");
@@ -633,10 +637,10 @@ public sealed class BowlingWindow : Window, IDisposable
 
     private void DrawBilliardsTab()
     {
-        this.labelFont.Push();
+        this.tabFont.Push();
         ImGui.TextColored(NeonTheme.Gold, "NEON CELESTIAL LANES  ·  BILLIARDS");
+        this.tabFont.Pop();
         ImGui.TextColored(NeonTheme.Muted, "Standard 8-ball. Play on the site or your Aetherphone, hang at the in-game table.");
-        this.labelFont.Pop();
         ImGui.Dummy(new Vector2(0, 8));
 
         ImGui.TextColored(NeonTheme.Cyan, "How it works");
@@ -669,10 +673,10 @@ public sealed class BowlingWindow : Window, IDisposable
 
     private void DrawJukeboxTab()
     {
-        this.labelFont.Push();
+        this.tabFont.Push();
         ImGui.TextColored(NeonTheme.Magenta, "NEON CELESTIAL LANES  ·  JUKEBOX");
+        this.tabFont.Pop();
         ImGui.TextColored(NeonTheme.Muted, "We broadcast on MogCast. That's the watch-party app on Aetherphone.");
-        this.labelFont.Pop();
         ImGui.Dummy(new Vector2(0, 8));
 
         ImGui.TextColored(NeonTheme.Gold, "How to listen");
@@ -695,7 +699,9 @@ public sealed class BowlingWindow : Window, IDisposable
 
     private void DrawMenuTab()
     {
+        this.tabFont.Push();
         ImGui.TextColored(NeonTheme.Cyan, "FOOD  ·  DRINK");
+        this.tabFont.Pop();
         ImGui.TextColored(NeonTheme.Muted, "Straight from the NCL Carrd. Tell the bar what you want.");
         if (!ImGui.BeginChild("ncl_menus", new Vector2(0, -8), true))
         {
@@ -730,11 +736,13 @@ public sealed class BowlingWindow : Window, IDisposable
 
     private void DrawCarrdTab()
     {
-        this.labelFont.Push();
+        this.tabFont.Push();
         ImGui.TextColored(NeonTheme.Magenta, "NEON CELESTIAL LANES");
+        this.tabFont.Pop();
         ImGui.TextColored(NeonTheme.Gold, NclVenue.Address);
         ImGui.TextColored(NeonTheme.Muted, "Bowling, billiards, darts, menu, gallery — the whole house lives on Carrd.");
         ImGui.Dummy(new Vector2(0, 12));
+        this.labelFont.Push();
         ImGui.PushStyleColor(ImGuiCol.Text, NeonTheme.Ice);
         if (NeonTheme.GlowButton("  OPEN CARRD  ", NeonTheme.Gold))
             Util.OpenLink(CarrdUrl);
