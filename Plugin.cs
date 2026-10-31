@@ -333,6 +333,7 @@ public sealed class BowlingWindow : Window, IDisposable
 
     public override void PreDraw()
     {
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(32f, 18f));
         this.SizeConstraints = this.compactHud ? CompactWindowLimits : FullWindowLimits;
         var target = this.pendingSize ?? this.holdUntilSize;
         if (target is Vector2 size)
@@ -346,6 +347,11 @@ public sealed class BowlingWindow : Window, IDisposable
         {
             this.SizeCondition = ImGuiCond.Appearing;
         }
+    }
+
+    public override void PostDraw()
+    {
+        ImGui.PopStyleVar();
     }
 
     public bool HandleChat(string text, string? sender = null)
@@ -412,7 +418,7 @@ public sealed class BowlingWindow : Window, IDisposable
         var bodyH = pinStatus ? MathF.Max(1f, avail - barH - gap) : MathF.Max(1f, avail);
 
         ImGui.BeginChild("ncl_body", new Vector2(0f, bodyH), false, ImGuiWindowFlags.NoScrollbar);
-        ImGui.Dummy(new Vector2(0f, 8f));
+        ImGui.Dummy(new Vector2(0f, 10f));
         switch (this.houseTab)
         {
             case 1:
