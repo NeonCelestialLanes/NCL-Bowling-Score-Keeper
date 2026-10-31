@@ -33,6 +33,7 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal ITextureProvider TextureProvider { get; init; } = null!;
     [PluginService] internal IDataManager DataManager { get; init; } = null!;
     [PluginService] internal IUnlockState UnlockState { get; init; } = null!;
+    [PluginService] internal ITargetManager TargetManager { get; init; } = null!;
 
     private BowlingWindow Window { get; set; } = null!;
     private WindowSystem WindowSystem { get; } = new("FFXIVBowlingSystem");
@@ -46,7 +47,8 @@ public sealed class Plugin : IDalamudPlugin
         IPlayerState playerState,
         ITextureProvider textureProvider,
         IDataManager dataManager,
-        IUnlockState unlockState)
+        IUnlockState unlockState,
+        ITargetManager targetManager)
     {
         this.PluginInterface = pluginInterface;
         this.CommandManager = commandManager;
@@ -57,8 +59,9 @@ public sealed class Plugin : IDalamudPlugin
         this.TextureProvider = textureProvider;
         this.DataManager = dataManager;
         this.UnlockState = unlockState;
+        this.TargetManager = targetManager;
 
-        this.Window = new BowlingWindow(pluginInterface, commandManager, partyList, objectTable, playerState, textureProvider, dataManager, unlockState);
+        this.Window = new BowlingWindow(pluginInterface, commandManager, partyList, objectTable, playerState, textureProvider, dataManager, unlockState, targetManager);
         this.WindowSystem.AddWindow(this.Window);
 
         if (this.CommandManager.Commands.ContainsKey(CommandName))
@@ -266,7 +269,8 @@ public sealed class BowlingWindow : Window, IDisposable
         IPlayerState playerState,
         ITextureProvider textureProvider,
         IDataManager dataManager,
-        IUnlockState unlockState)
+        IUnlockState unlockState,
+        ITargetManager targetManager)
         : base("NCL Bowling Score", ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse)
     {
         this.pluginInterface = pluginInterface;
@@ -275,7 +279,7 @@ public sealed class BowlingWindow : Window, IDisposable
         this.objectTable = objectTable;
         this.playerState = playerState;
         this.lifestream = new LifestreamTravel(pluginInterface);
-        this.mogCast = new MogCast(commandManager, objectTable);
+        this.mogCast = new MogCast(commandManager, objectTable, targetManager);
         this.throwEmote = new ThrowEmote(dataManager, unlockState);
         var dir = pluginInterface.AssemblyLocation.DirectoryName ?? string.Empty;
         var fontPath = Path.Combine(dir, "Assets", "LuckiestGuy-Regular.ttf");
@@ -1014,7 +1018,7 @@ public sealed class BowlingWindow : Window, IDisposable
         ImGui.TextColored(
             live ? NeonTheme.Gold : NeonTheme.Muted,
             live
-                ? $"LIVE from {hostName}  ·  tap JOIN MOGCAST to hop on the house screen"
+                ? $"LIVE from {hostName}  ·  JOIN opens MogCast on their screen only"
                 : atLanes && !this.mogCast.PhoneInstalled
                     ? "You're at the lanes. Install Aetherphone to join MogCast."
                     : atLanes
@@ -1023,10 +1027,10 @@ public sealed class BowlingWindow : Window, IDisposable
         ImGui.Dummy(new Vector2(0, 8));
 
         ImGui.TextColored(NeonTheme.Gold, "How to listen");
-        ImGui.TextWrapped("The house screen is on MogCast, so everyone hears and sees the same thing. The conductor runs it on Aetherphone. Guests join from the house — playback stays in sync.");
+        ImGui.TextWrapped("Only Mikh, Uki, or Shin's MogCast. LIVE stays off for anyone else's screen. When it lights, it targets the house conductor and opens MogCast — pick their nearby party.");
         ImGui.Dummy(new Vector2(0, 6));
-        ImGui.BulletText("At NCL with Aetherphone: LIVE opens MogCast. Join a nearby screen or the house code.");
-        ImGui.BulletText("Look for the in-world screen at the lanes.");
+        ImGui.BulletText("LIVE only when Mikh, Uki, or Shin is at NCL with you.");
+        ImGui.BulletText("Join their nearby screen — skip other parties.");
         ImGui.BulletText("No phone yet? Grab Aetherphone, then come back and hit LIVE.");
         ImGui.Dummy(new Vector2(0, 12));
 
@@ -1034,7 +1038,7 @@ public sealed class BowlingWindow : Window, IDisposable
         ImGui.PushStyleColor(ImGuiCol.Text, NeonTheme.Ice);
         ImGui.BeginDisabled(!live);
         if (NeonTheme.GlowButton("  LIVE  ·  JOIN MOGCAST  ", live ? NeonTheme.Magenta : NeonTheme.Muted) && live)
-            this.mogCast.TryOpen();
+            this.mogCast.TryOpenHouseCast();
         ImGui.EndDisabled();
         ImGui.SameLine();
         if (NeonTheme.GlowButton("  GET AETHERPHONE  ", NeonTheme.Cyan))

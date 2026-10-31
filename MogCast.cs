@@ -4,8 +4,9 @@ using Dalamud.Plugin.Services;
 namespace FFXIVBowling;
 
 /// <summary>
-/// Hands off to Aetherphone's MogCast. LIVE is on only when a house conductor
-/// (Mikh, Uki, or Shin) is at NCL with you. Aetherphone does not publish party IPC.
+/// Hands off to Aetherphone MogCast only when a house conductor
+/// (Mikh, Uki, or Shin) is at NCL. Aetherphone has no join-by-name IPC,
+/// so we target that conductor then open MogCast — guests pick their nearby screen.
 /// </summary>
 internal sealed class MogCast
 {
@@ -20,11 +21,13 @@ internal sealed class MogCast
 
     private readonly ICommandManager commands;
     private readonly IObjectTable objectTable;
+    private readonly ITargetManager targets;
 
-    public MogCast(ICommandManager commands, IObjectTable objectTable)
+    public MogCast(ICommandManager commands, IObjectTable objectTable, ITargetManager targets)
     {
         this.commands = commands;
         this.objectTable = objectTable;
+        this.targets = targets;
     }
 
     public bool PhoneInstalled => this.commands.Commands.ContainsKey("/phone");
@@ -35,46 +38,43 @@ internal sealed class MogCast
         if (!NclVenue.IsAt(playerState) || !this.PhoneInstalled)
             return false;
 
-        return this.TryFindHost(out hostName);
+        return this.TryFindHost(out _, out hostName);
     }
 
-    public bool TryFindHost(out string hostName)
+    public bool TryFindHost(out IPlayerCharacter? host, out string hostName)
     {
+        host = null;
         hostName = string.Empty;
-        foreach (var obj in this.objectTable)
+        foreach (var wanted in Hosts)
         {
-            if (obj is not IPlayerCharacter player)
-                continue;
+            foreach (var obj in this.objectTable)
+            {
+                if (obj is not IPlayerCharacter player)
+                    continue;
 
-            var name = player.Name.TextValue;
-            if (!IsHouseHost(name))
-                continue;
+                var name = player.Name.TextValue;
+                if (!RollParser.NamesMatch(name, wanted))
+                    continue;
 
-            hostName = RollParser.NormalizeName(name);
-            return true;
+                host = player;
+                hostName = RollParser.NormalizeName(name);
+                return true;
+            }
         }
 
         return false;
     }
 
-    public bool TryOpen()
+    public bool TryOpenHouseCast()
     {
         if (!this.PhoneInstalled)
             return false;
 
+        if (!this.TryFindHost(out var host, out _))
+            return false;
+
+        this.targets.Target = host;
         this.commands.ProcessCommand(OpenCommand);
         return true;
-    }
-
-    private static bool IsHouseHost(string name)
-    {
-        var normalized = RollParser.NormalizeName(name);
-        foreach (var host in Hosts)
-        {
-            if (RollParser.NamesMatch(normalized, host))
-                return true;
-        }
-
-        return false;
     }
 }
