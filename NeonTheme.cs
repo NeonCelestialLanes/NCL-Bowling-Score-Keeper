@@ -378,12 +378,62 @@ internal static class NeonTheme
     private static Vector4 Mix(Vector4 a, Vector4 b, float t) =>
         new(a.X + ((b.X - a.X) * t), a.Y + ((b.Y - a.Y) * t), a.Z + ((b.Z - a.Z) * t), a.W + ((b.W - a.W) * t));
 
+    public static string VisibleLabel(string label)
+    {
+        var cut = label.IndexOf("##", StringComparison.Ordinal);
+        return cut >= 0 ? label[..cut] : label;
+    }
+
+    public static float GlowWidth(string label) =>
+        ImGui.CalcTextSize(VisibleLabel(label)).X + 28f;
+
+    public static float ChipWidth(string label) =>
+        ImGui.CalcTextSize(VisibleLabel(label)).X + 18f;
+
+    public static float GlowRowWidth(params string[] labels)
+    {
+        var gap = ImGui.GetStyle().ItemSpacing.X;
+        var width = 0f;
+        for (var i = 0; i < labels.Length; i++)
+        {
+            if (i > 0)
+                width += gap;
+            width += GlowWidth(labels[i]);
+        }
+
+        return width;
+    }
+
+    public static float ChipRowWidth(float extra, params string[] labels)
+    {
+        const float gap = 8f;
+        var width = 0f;
+        for (var i = 0; i < labels.Length; i++)
+        {
+            if (i > 0)
+                width += gap;
+            width += ChipWidth(labels[i]);
+        }
+
+        if (extra > 0f)
+            width += gap + extra;
+
+        return width;
+    }
+
+    public static void IndentRow(float rowWidth, float rightReserve = 210f)
+    {
+        var avail = ImGui.GetContentRegionAvail().X;
+        var room = MathF.Max(rowWidth, avail - rightReserve);
+        var pad = MathF.Max(0f, (room - rowWidth) * 0.5f);
+        if (pad < 1f)
+            return;
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + pad);
+    }
+
     public static bool GlowButton(string label, Vector4 glow)
     {
-        var text = label;
-        var cut = label.IndexOf("##", StringComparison.Ordinal);
-        if (cut >= 0)
-            text = label[..cut];
+        var text = VisibleLabel(label);
 
         var size = ImGui.CalcTextSize(text) + new Vector2(28f, 16f);
         ImGui.PushID(label);
@@ -662,6 +712,27 @@ internal static class NeonTheme
         dl.AddRect(min + new Vector2(1.4f), max - new Vector2(1.4f), Col(new Vector4(1f, 1f, 1f, 0.10f * dim)), MathF.Max(2f, r - 1.4f), ImDrawFlags.None, 1f);
     }
 
+    public static void DrawStrikeOverlay(IDalamudTextureWrap? art, float life)
+    {
+        if (art is null || art.Handle == nint.Zero || art.Width <= 0 || art.Height <= 0 || life <= 0f)
+            return;
+
+        life = Math.Clamp(life, 0f, 1f);
+        var fade = life > 0.82f ? (1f - life) / 0.18f : life < 0.22f ? life / 0.22f : 1f;
+        fade = Math.Clamp(fade, 0f, 1f);
+        var pop = 0.94f + (0.06f * MathF.Sin((float)ImGui.GetTime() * 9f));
+        var win = ImGui.GetWindowPos();
+        var size = ImGui.GetWindowSize();
+        var maxW = size.X * 0.58f;
+        var maxH = size.Y * 0.46f;
+        var scale = MathF.Min(maxW / art.Width, maxH / art.Height) * pop;
+        var w = art.Width * scale;
+        var h = art.Height * scale;
+        var min = win + new Vector2((size.X - w) * 0.5f, (size.Y - h) * 0.42f);
+        var col = Col(new Vector4(1f, 1f, 1f, fade));
+        ImGui.GetWindowDrawList().AddImage(art.Handle, min, min + new Vector2(w, h), Vector2.Zero, Vector2.One, col);
+    }
+
     public static void GlowSeparator()
     {
         var start = ImGui.GetCursorScreenPos();
@@ -670,22 +741,6 @@ internal static class NeonTheme
         dl.AddLine(start, start + new Vector2(width, 0), Col(WithAlpha(Magenta, 0.22f)), 4f);
         dl.AddLine(start, start + new Vector2(width, 0), Col(WithAlpha(Cyan, 0.75f)), 1.3f);
         ImGui.Dummy(new Vector2(width, 10f));
-    }
-
-    public static void AlleyBanner(string text)
-    {
-        var win = ImGui.GetWindowPos();
-        var size = ImGui.GetWindowSize();
-        var width = MathF.Max(220f, size.X - 48f);
-        var height = 56f;
-        var min = win + new Vector2((size.X - width) * 0.5f, size.Y * 0.36f);
-        var max = min + new Vector2(width, height);
-        var dl = ImGui.GetWindowDrawList();
-        DrawRaisedPill(dl, min, max, Gold, filled: true, hovered: false, held: false, punch: 0.82f);
-        var label = ImGui.CalcTextSize(text);
-        var pos = new Vector2(min.X + ((width - label.X) * 0.5f), min.Y + ((height - label.Y) * 0.5f) - 1f);
-        dl.AddText(pos + new Vector2(0f, 1.4f), Col(new Vector4(0f, 0f, 0f, 0.45f)), text);
-        dl.AddText(pos, Col(White), text);
     }
 
     public static void StatusBar(string text)
@@ -707,7 +762,9 @@ internal static class NeonTheme
 
     public static void BeginInsetBar()
     {
+        var x = ImGui.GetCursorPosX();
         ImGui.Dummy(new Vector2(0f, 4f));
+        ImGui.SetCursorPosX(x);
         trayOrigin = ImGui.GetCursorScreenPos();
         trayWidth = ImGui.GetContentRegionAvail().X;
         var dl = ImGui.GetWindowDrawList();

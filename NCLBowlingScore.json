@@ -4,7 +4,7 @@
   "Punchline": "Keep score at Neon Celestial Lanes.",
   "Description": "Opens with /nclbowling. Tabs for bowling, darts, billiards, jukebox, menu, and Carrd.",
   "InternalName": "NCLBowlingScore",
-  "AssemblyVersion": "1.0.22.0",
+  "AssemblyVersion": "1.0.23.0",
   "RepoUrl": "https://github.com/NeonCelestialLanes/NCL-Bowling-Score-Keeper",
   "IconUrl": "https://raw.githubusercontent.com/NeonCelestialLanes/NCL-Bowling-Score-Keeper/main/images/icon.png",
   "ApplicableVersion": "any",

@@ -227,10 +227,10 @@ public sealed class BowlingWindow : Window, IDisposable
     private readonly ISharedImmediateTexture? dartsArt;
     private readonly ISharedImmediateTexture? billiardsArt;
     private readonly ISharedImmediateTexture? jukeboxArt;
+    private readonly ISharedImmediateTexture? strikeArt;
     private readonly PartyLanes lanes = new();
     private string status = "Walk up. Tell us you're ready to dominate the lanes.";
-    private string alleyCall = string.Empty;
-    private long alleyCallUntil;
+    private long strikeUntil;
     private string guestName = string.Empty;
     private bool awaitingLocalRoll;
     private bool rollClickArmed = true;
@@ -291,6 +291,7 @@ public sealed class BowlingWindow : Window, IDisposable
         var dartsArtPath = Path.Combine(dir, "Assets", "ncl-darts-neon.png");
         var billiardsArtPath = Path.Combine(dir, "Assets", "ncl-billiards-neon.png");
         var jukeboxArtPath = Path.Combine(dir, "Assets", "ncl-jukebox-neon.png");
+        var strikeArtPath = Path.Combine(dir, "Assets", "ncl-strike.png");
         var foodPath = Path.Combine(dir, "Assets", "menu-food.jpg");
         var drinkPath = Path.Combine(dir, "Assets", "menu-drink.jpg");
         this.labelFont = pluginInterface.UiBuilder.FontAtlas.NewDelegateFontHandle(e => e.OnPreBuild(toolkit =>
@@ -312,6 +313,7 @@ public sealed class BowlingWindow : Window, IDisposable
         this.dartsArt = File.Exists(dartsArtPath) ? textureProvider.GetFromFile(dartsArtPath) : null;
         this.billiardsArt = File.Exists(billiardsArtPath) ? textureProvider.GetFromFile(billiardsArtPath) : null;
         this.jukeboxArt = File.Exists(jukeboxArtPath) ? textureProvider.GetFromFile(jukeboxArtPath) : null;
+        this.strikeArt = File.Exists(strikeArtPath) ? textureProvider.GetFromFile(strikeArtPath) : null;
         this.menuFood = File.Exists(foodPath) ? textureProvider.GetFromFile(foodPath) : null;
         this.menuDrink = File.Exists(drinkPath) ? textureProvider.GetFromFile(drinkPath) : null;
         this.savedWindowSize = EvenSize(new Vector2(this.config.FullWidth, this.config.FullHeight));
@@ -405,7 +407,7 @@ public sealed class BowlingWindow : Window, IDisposable
         if (this.compactHud)
         {
             this.DrawCompactHud();
-            this.DrawAlleyCall();
+            this.DrawStrikeOverlay();
             NeonTheme.Pop();
             return;
         }
@@ -455,18 +457,26 @@ public sealed class BowlingWindow : Window, IDisposable
         ImGui.EndChild();
         if (pinStatus)
             NeonTheme.StatusBar(this.status);
-        this.DrawAlleyCall();
+        this.DrawStrikeOverlay();
+
         NeonTheme.Pop();
     }
 
-    private void DrawAlleyCall()
+    private void DrawStrikeOverlay()
     {
-        if (this.alleyCallUntil <= Environment.TickCount64 || this.alleyCall.Length == 0)
+        var left = this.strikeUntil - Environment.TickCount64;
+        if (left <= 0)
             return;
 
-        this.tabFont.Push();
-        NeonTheme.AlleyBanner(this.alleyCall);
-        this.tabFont.Pop();
+        const float span = 3200f;
+        NeonTheme.DrawStrikeOverlay(this.strikeArt?.GetWrapOrEmpty(), left / span);
+    }
+
+    private void FlashStrike(BowlerLane lane)
+    {
+        if (!lane.Game.LastBallWasStrike())
+            return;
+        this.strikeUntil = Environment.TickCount64 + 3200;
     }
 
     private void SetCompact(bool on)
@@ -750,6 +760,7 @@ public sealed class BowlingWindow : Window, IDisposable
                     : !localTurn
                         ? "  WAIT YOUR TURN  ##rollball"
                         : "  ROLL BALL  ##rollball";
+        NeonTheme.IndentRow(NeonTheme.GlowRowWidth(rollLabel, "  NEW GAME  ", "  RULES  ", "  MINI  "));
         ImGui.BeginDisabled(!canRoll);
         var clickedRoll = NeonTheme.GlowButton(rollLabel, rollColor);
         ImGui.EndDisabled();
@@ -870,6 +881,7 @@ public sealed class BowlingWindow : Window, IDisposable
                     : !localTurn
                         ? "  WAIT YOUR TURN  ##throwdart"
                         : "  THROW DART  ##throwdart";
+        NeonTheme.IndentRow(NeonTheme.GlowRowWidth(throwLabel, "  NEW CLOCK  ", "  RULES  ", "  MINI  "));
         ImGui.BeginDisabled(!canThrow);
         var clickedThrow = NeonTheme.GlowButton(throwLabel, throwColor);
         ImGui.EndDisabled();
@@ -1133,6 +1145,7 @@ public sealed class BowlingWindow : Window, IDisposable
     {
         this.labelFont.Push();
         ImGui.TextColored(NeonTheme.Cyan, "ADD A PLAYER");
+        NeonTheme.IndentRow(280f + ImGui.GetStyle().ItemSpacing.X + NeonTheme.GlowWidth("  ADD  "));
         ImGui.SetNextItemWidth(280);
         var addGuest = ImGui.InputTextWithHint("##guest_name", "First Last", ref this.guestName, 40, ImGuiInputTextFlags.EnterReturnsTrue);
         ImGui.SameLine();
@@ -1217,15 +1230,6 @@ public sealed class BowlingWindow : Window, IDisposable
         }
 
         return null;
-    }
-
-    private void MaybeAnnounceStrike(BowlerLane lane)
-    {
-        if (!lane.Game.LastBallWasStrike())
-            return;
-
-        this.alleyCall = lane.Game.DescribeLastMark(BowlingGame.PinsPerFrame);
-        this.alleyCallUntil = Environment.TickCount64 + 4200;
     }
 
     private void EnqueueChat(string command, long at)
@@ -1364,7 +1368,7 @@ public sealed class BowlingWindow : Window, IDisposable
                 this.status += $"  Next up: {next.Name}.";
         }
 
-        this.MaybeAnnounceStrike(lane);
+        this.FlashStrike(lane);
         return true;
     }
 
@@ -1442,6 +1446,9 @@ public sealed class BowlingWindow : Window, IDisposable
         var canFix = onApproach is not null && !onApproach.Game.IsComplete;
         var canUndo = this.FindLastScoredLane() is not null;
 
+        this.labelFont.Push();
+        NeonTheme.IndentRow(NeonTheme.ChipRowWidth(52f, "  GUTTER  ##gutter", "  PASS  ##pass", "  SKIP  ##fixskip", "  UNDO  ##undo", "  MARK  ##mark"));
+        this.labelFont.Pop();
         NeonTheme.BeginInsetBar();
         this.labelFont.Push();
         ImGui.PushStyleColor(ImGuiCol.Text, NeonTheme.Ice);
@@ -1491,6 +1498,9 @@ public sealed class BowlingWindow : Window, IDisposable
     {
         var canFix = onOche is not null && !onOche.Clock.IsComplete;
 
+        this.labelFont.Push();
+        NeonTheme.IndentRow(NeonTheme.ChipRowWidth(52f, "  MISS  ##dmiss", "  HIT  ##dhit", "  SKIP  ##dfixskip", "  MARK  ##dmark"));
+        this.labelFont.Pop();
         NeonTheme.BeginInsetBar();
         this.labelFont.Push();
         ImGui.PushStyleColor(ImGuiCol.Text, NeonTheme.Ice);
@@ -1587,7 +1597,7 @@ public sealed class BowlingWindow : Window, IDisposable
                 this.status += $"  Next up: {next.Name}.";
         }
 
-        this.MaybeAnnounceStrike(lane);
+        this.FlashStrike(lane);
     }
 
     private void SkipAfk(BowlerLane lane)
