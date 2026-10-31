@@ -60,6 +60,9 @@ public sealed class Plugin : IDalamudPlugin
         this.Window = new BowlingWindow(pluginInterface, partyList, objectTable, playerState, textureProvider, dataManager, unlockState);
         this.WindowSystem.AddWindow(this.Window);
 
+        if (this.CommandManager.Commands.ContainsKey(CommandName))
+            this.CommandManager.RemoveHandler(CommandName);
+
         this.CommandManager.AddHandler(CommandName, new CommandInfo(this.OnCommand)
         {
                 HelpMessage = "Opens the NCL Bowling Score scorecard."
