@@ -137,10 +137,33 @@ public sealed class BowlingGame
         return frames;
     }
 
+    public bool LastBallWasStrike()
+    {
+        if (this.rolls.Count == 0 || this.rolls[^1] != PinsPerFrame)
+            return false;
+
+        var frames = this.GetFrames();
+        for (var i = frames.Count - 1; i >= 0; i--)
+        {
+            var frame = frames[i];
+            var last = !string.IsNullOrEmpty(frame.Roll3)
+                ? frame.Roll3
+                : !string.IsNullOrEmpty(frame.Roll2)
+                    ? frame.Roll2
+                    : frame.Roll1;
+            if (string.IsNullOrEmpty(last))
+                continue;
+
+            return last == "X";
+        }
+
+        return false;
+    }
+
     public string DescribeLastMark(int countedPins)
     {
-        if (countedPins == PinsPerFrame)
-            return this.IsComplete ? "Strike! That's the game." : "Strike!";
+        if (this.LastBallWasStrike())
+            return Finish(StrikeLine());
 
         var frames = this.GetFrames();
         var index = this.CurrentFrameNumber - 1;
@@ -149,26 +172,64 @@ public sealed class BowlingGame
 
         var frame = frames[Math.Clamp(index, 0, MaxFrames - 1)];
         if (frame.IsSpare && (this.RollsInCurrentFrame == 0 || this.IsComplete || frame.Number == MaxFrames))
-            return this.IsComplete ? "Spare! That's the game." : "Spare!";
+            return Finish(SpareLine());
 
         if (this.IsFrameInProgress && this.RollsInCurrentFrame == 1 && this.RemainingPins == 2)
             return SplitLine();
 
-        if (this.IsComplete)
-            return countedPins == 0 ? "The pins won. Tragic. That's the game." : $"{countedPins} pin(s) down. That's the game.";
+        if (countedPins == 0)
+            return Finish(GutterLine());
 
-        return countedPins == 0 ? "The pins won. Tragic." : $"{countedPins} pin(s) down.";
+        return Finish(PinLine(countedPins));
     }
 
-    private static readonly string[] SplitLines =
+    private string Finish(string line) =>
+        this.IsComplete ? line + " That's the game." : line;
+
+    private static string SplitLine() =>
+        "Split. Are you in lane 2? That lane is haunted, and the ghost is keeping your pins hostage with that split.";
+
+    private string StrikeLine() => StrikeLines[this.rolls.Count % StrikeLines.Length];
+
+    private string SpareLine() => SpareLines[this.rolls.Count % SpareLines.Length];
+
+    private string GutterLine() => GutterLines[this.rolls.Count % GutterLines.Length];
+
+    private static string PinLine(int countedPins) => countedPins switch
     {
-        "Split. Are you in lane 2? That lane is haunted, and the ghost is keeping your pins hostage.",
-        "Split. Two pins left, holding hands in the corner like they pay rent.",
-        "Split. The 7-10 just filed a restraining order against your ball.",
-        "Split. Cute. The pins formed a support group and you're not invited.",
+        1 => "One lonely pin. The rest of them watched it happen.",
+        2 => "Two. Cute. That's a teaser, not a frame.",
+        3 => "Three. The pins are laughing. Softly.",
+        4 => "Four down. The other six just formed a union.",
+        5 => "Halfway. Pick a personality for the second ball.",
+        6 => "Six. You're flirting with competence.",
+        7 => "Seven. Leave those three. They've seen things.",
+        8 => "Eight. Don't choke the spare.",
+        9 => "Nine. That last pin is doing a little dance.",
+        _ => $"{countedPins} pin(s) down.",
     };
 
-    private string SplitLine() => SplitLines[this.rolls.Count % SplitLines.Length];
+    private static readonly string[] StrikeLines =
+    [
+        "Strike! Don't even look back.",
+        "Strike! All ten. Sit down.",
+        "Strike! The pins filed a complaint.",
+        "Strike! Clean rack. Make it look accidental.",
+    ];
+
+    private static readonly string[] SpareLines =
+    [
+        "Spare! You cleaned up your mess.",
+        "Spare! The ghost didn't get a vote.",
+        "Spare! Took you two, but the rack is gone.",
+    ];
+
+    private static readonly string[] GutterLines =
+    [
+        "The pins won. Tragic.",
+        "Gutter. The ball went to get snacks.",
+        "Zero. Even the ghost looked away.",
+    ];
 
     private FrameView BuildStandardFrame(int frame, ref int rollIndex, ref int running, bool isCurrent)
     {

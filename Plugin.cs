@@ -229,11 +229,14 @@ public sealed class BowlingWindow : Window, IDisposable
     private readonly ISharedImmediateTexture? jukeboxArt;
     private readonly PartyLanes lanes = new();
     private string status = "Walk up. Tell us you're ready to dominate the lanes.";
+    private string alleyCall = string.Empty;
+    private long alleyCallUntil;
     private string guestName = string.Empty;
     private bool awaitingLocalRoll;
     private bool rollClickArmed = true;
     private string lastRollKey = string.Empty;
     private long lastRollTicks;
+    private int lastRollPins = -1;
     private readonly List<(string Command, long At)> outgoing = new();
     private readonly Dictionary<ulong, bool> sheetOpen = new();
     private long commandReadyAt;
@@ -367,6 +370,13 @@ public sealed class BowlingWindow : Window, IDisposable
         if (!RollParser.TryParse(text, sender, out var rolledName, out var isYou, out var pins, out var dieSides))
             return false;
 
+        var now = Environment.TickCount64;
+        if (pins == this.lastRollPins && now - this.lastRollTicks < 500)
+            return true;
+
+        this.lastRollPins = pins;
+        this.lastRollTicks = now;
+
         if (dieSides == 10 || (dieSides == 0 && this.awaitingLocalDart))
             return this.ApplyHeardDart(rolledName, sender, text, isYou, pins);
 
@@ -395,6 +405,7 @@ public sealed class BowlingWindow : Window, IDisposable
         if (this.compactHud)
         {
             this.DrawCompactHud();
+            this.DrawAlleyCall();
             NeonTheme.Pop();
             return;
         }
@@ -444,7 +455,18 @@ public sealed class BowlingWindow : Window, IDisposable
         ImGui.EndChild();
         if (pinStatus)
             NeonTheme.StatusBar(this.status);
+        this.DrawAlleyCall();
         NeonTheme.Pop();
+    }
+
+    private void DrawAlleyCall()
+    {
+        if (this.alleyCallUntil <= Environment.TickCount64 || this.alleyCall.Length == 0)
+            return;
+
+        this.tabFont.Push();
+        NeonTheme.AlleyBanner(this.alleyCall);
+        this.tabFont.Pop();
     }
 
     private void SetCompact(bool on)
@@ -1197,6 +1219,15 @@ public sealed class BowlingWindow : Window, IDisposable
         return null;
     }
 
+    private void MaybeAnnounceStrike(BowlerLane lane)
+    {
+        if (!lane.Game.LastBallWasStrike())
+            return;
+
+        this.alleyCall = lane.Game.DescribeLastMark(BowlingGame.PinsPerFrame);
+        this.alleyCallUntil = Environment.TickCount64 + 4200;
+    }
+
     private void EnqueueChat(string command, long at)
     {
         this.outgoing.Add((command, at));
@@ -1269,11 +1300,17 @@ public sealed class BowlingWindow : Window, IDisposable
     private bool ApplyHeardBowl(string? rolledName, string? sender, string text, bool isYou, int pins)
     {
         var local = this.LocalLane();
-        if (isYou && local is not null)
-            rolledName = local.Name;
+        var yours = isYou
+            || (local is not null && RollParser.NamesMatch(rolledName ?? string.Empty, local.Name))
+            || (local is not null && RollParser.NamesMatch(sender ?? string.Empty, local.Name));
 
-        var lane = this.lanes.FindBowler(rolledName, sender, text);
-        if (lane is null && isYou)
+        BowlerLane? lane;
+        if (yours && local is not null)
+            lane = local;
+        else
+            lane = this.lanes.FindBowler(rolledName, sender);
+
+        if (lane is null && yours)
             lane = local;
 
         if (lane is null)
@@ -1283,6 +1320,8 @@ public sealed class BowlingWindow : Window, IDisposable
         }
 
         var onApproach = this.lanes.WhoseTurn();
+        if (lane.Game.IsFrameInProgress)
+            onApproach = lane;
         if (onApproach is null || !ReferenceEquals(onApproach, lane))
         {
             if (lane.IsLocal)
@@ -1304,6 +1343,7 @@ public sealed class BowlingWindow : Window, IDisposable
 
         this.lastRollKey = key;
         this.lastRollTicks = now;
+        this.lastRollPins = pins;
 
         if (!this.lanes.TryApplyRoll(lane, pins, out var counted, out var overshot, out var error))
         {
@@ -1324,6 +1364,7 @@ public sealed class BowlingWindow : Window, IDisposable
                 this.status += $"  Next up: {next.Name}.";
         }
 
+        this.MaybeAnnounceStrike(lane);
         return true;
     }
 
@@ -1545,6 +1586,8 @@ public sealed class BowlingWindow : Window, IDisposable
             if (next is not null)
                 this.status += $"  Next up: {next.Name}.";
         }
+
+        this.MaybeAnnounceStrike(lane);
     }
 
     private void SkipAfk(BowlerLane lane)

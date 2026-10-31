@@ -672,6 +672,22 @@ internal static class NeonTheme
         ImGui.Dummy(new Vector2(width, 10f));
     }
 
+    public static void AlleyBanner(string text)
+    {
+        var win = ImGui.GetWindowPos();
+        var size = ImGui.GetWindowSize();
+        var width = MathF.Max(220f, size.X - 48f);
+        var height = 56f;
+        var min = win + new Vector2((size.X - width) * 0.5f, size.Y * 0.36f);
+        var max = min + new Vector2(width, height);
+        var dl = ImGui.GetWindowDrawList();
+        DrawRaisedPill(dl, min, max, Gold, filled: true, hovered: false, held: false, punch: 0.82f);
+        var label = ImGui.CalcTextSize(text);
+        var pos = new Vector2(min.X + ((width - label.X) * 0.5f), min.Y + ((height - label.Y) * 0.5f) - 1f);
+        dl.AddText(pos + new Vector2(0f, 1.4f), Col(new Vector4(0f, 0f, 0f, 0.45f)), text);
+        dl.AddText(pos, Col(White), text);
+    }
+
     public static void StatusBar(string text)
     {
         var start = ImGui.GetCursorScreenPos();

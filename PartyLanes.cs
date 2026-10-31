@@ -228,7 +228,7 @@ internal sealed class PartyLanes
     {
         counted = 0;
         overshot = false;
-        var onApproach = this.WhoseTurn();
+        var onApproach = lane.Game.IsFrameInProgress ? lane : this.WhoseTurn();
         if (onApproach is null || !ReferenceEquals(onApproach, lane))
         {
             error = onApproach is null
