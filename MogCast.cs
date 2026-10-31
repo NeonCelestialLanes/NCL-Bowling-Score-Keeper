@@ -14,7 +14,7 @@ internal sealed class MogCast
 
     private static readonly string[] Hosts =
     [
-        "Mikh Alipoh",
+        "Mikh Aliapoh",
         "Ukiri Morinou",
         "Shin Morinou",
     ];
