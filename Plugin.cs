@@ -760,7 +760,6 @@ public sealed class BowlingWindow : Window, IDisposable
                     : !localTurn
                         ? "  WAIT YOUR TURN  ##rollball"
                         : "  ROLL BALL  ##rollball";
-        NeonTheme.IndentRow(NeonTheme.GlowRowWidth(rollLabel, "  NEW GAME  ", "  RULES  ", "  MINI  "));
         ImGui.BeginDisabled(!canRoll);
         var clickedRoll = NeonTheme.GlowButton(rollLabel, rollColor);
         ImGui.EndDisabled();
@@ -881,7 +880,6 @@ public sealed class BowlingWindow : Window, IDisposable
                     : !localTurn
                         ? "  WAIT YOUR TURN  ##throwdart"
                         : "  THROW DART  ##throwdart";
-        NeonTheme.IndentRow(NeonTheme.GlowRowWidth(throwLabel, "  NEW CLOCK  ", "  RULES  ", "  MINI  "));
         ImGui.BeginDisabled(!canThrow);
         var clickedThrow = NeonTheme.GlowButton(throwLabel, throwColor);
         ImGui.EndDisabled();
@@ -1145,7 +1143,6 @@ public sealed class BowlingWindow : Window, IDisposable
     {
         this.labelFont.Push();
         ImGui.TextColored(NeonTheme.Cyan, "ADD A PLAYER");
-        NeonTheme.IndentRow(280f + ImGui.GetStyle().ItemSpacing.X + NeonTheme.GlowWidth("  ADD  "));
         ImGui.SetNextItemWidth(280);
         var addGuest = ImGui.InputTextWithHint("##guest_name", "First Last", ref this.guestName, 40, ImGuiInputTextFlags.EnterReturnsTrue);
         ImGui.SameLine();
@@ -1446,9 +1443,6 @@ public sealed class BowlingWindow : Window, IDisposable
         var canFix = onApproach is not null && !onApproach.Game.IsComplete;
         var canUndo = this.FindLastScoredLane() is not null;
 
-        this.labelFont.Push();
-        NeonTheme.IndentRow(NeonTheme.ChipRowWidth(52f, "  GUTTER  ##gutter", "  PASS  ##pass", "  SKIP  ##fixskip", "  UNDO  ##undo", "  MARK  ##mark"));
-        this.labelFont.Pop();
         NeonTheme.BeginInsetBar();
         this.labelFont.Push();
         ImGui.PushStyleColor(ImGuiCol.Text, NeonTheme.Ice);
@@ -1498,9 +1492,6 @@ public sealed class BowlingWindow : Window, IDisposable
     {
         var canFix = onOche is not null && !onOche.Clock.IsComplete;
 
-        this.labelFont.Push();
-        NeonTheme.IndentRow(NeonTheme.ChipRowWidth(52f, "  MISS  ##dmiss", "  HIT  ##dhit", "  SKIP  ##dfixskip", "  MARK  ##dmark"));
-        this.labelFont.Pop();
         NeonTheme.BeginInsetBar();
         this.labelFont.Push();
         ImGui.PushStyleColor(ImGuiCol.Text, NeonTheme.Ice);

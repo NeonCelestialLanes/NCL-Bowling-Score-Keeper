@@ -384,53 +384,6 @@ internal static class NeonTheme
         return cut >= 0 ? label[..cut] : label;
     }
 
-    public static float GlowWidth(string label) =>
-        ImGui.CalcTextSize(VisibleLabel(label)).X + 28f;
-
-    public static float ChipWidth(string label) =>
-        ImGui.CalcTextSize(VisibleLabel(label)).X + 18f;
-
-    public static float GlowRowWidth(params string[] labels)
-    {
-        var gap = ImGui.GetStyle().ItemSpacing.X;
-        var width = 0f;
-        for (var i = 0; i < labels.Length; i++)
-        {
-            if (i > 0)
-                width += gap;
-            width += GlowWidth(labels[i]);
-        }
-
-        return width;
-    }
-
-    public static float ChipRowWidth(float extra, params string[] labels)
-    {
-        const float gap = 8f;
-        var width = 0f;
-        for (var i = 0; i < labels.Length; i++)
-        {
-            if (i > 0)
-                width += gap;
-            width += ChipWidth(labels[i]);
-        }
-
-        if (extra > 0f)
-            width += gap + extra;
-
-        return width;
-    }
-
-    public static void IndentRow(float rowWidth, float rightReserve = 210f)
-    {
-        var avail = ImGui.GetContentRegionAvail().X;
-        var room = MathF.Max(rowWidth, avail - rightReserve);
-        var pad = MathF.Max(0f, (room - rowWidth) * 0.5f);
-        if (pad < 1f)
-            return;
-        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + pad);
-    }
-
     public static bool GlowButton(string label, Vector4 glow)
     {
         var text = VisibleLabel(label);
@@ -730,7 +683,10 @@ internal static class NeonTheme
         var h = art.Height * scale;
         var min = win + new Vector2((size.X - w) * 0.5f, (size.Y - h) * 0.42f);
         var col = Col(new Vector4(1f, 1f, 1f, fade));
-        ImGui.GetWindowDrawList().AddImage(art.Handle, min, min + new Vector2(w, h), Vector2.Zero, Vector2.One, col);
+        var dl = ImGui.GetForegroundDrawList();
+        dl.PushClipRect(win, win + size, true);
+        dl.AddImage(art.Handle, min, min + new Vector2(w, h), Vector2.Zero, Vector2.One, col);
+        dl.PopClipRect();
     }
 
     public static void GlowSeparator()
