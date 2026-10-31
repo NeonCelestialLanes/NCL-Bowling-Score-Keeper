@@ -58,7 +58,7 @@ public sealed class Plugin : IDalamudPlugin
         this.DataManager = dataManager;
         this.UnlockState = unlockState;
 
-        this.Window = new BowlingWindow(pluginInterface, partyList, objectTable, playerState, textureProvider, dataManager, unlockState);
+        this.Window = new BowlingWindow(pluginInterface, commandManager, partyList, objectTable, playerState, textureProvider, dataManager, unlockState);
         this.WindowSystem.AddWindow(this.Window);
 
         if (this.CommandManager.Commands.ContainsKey(CommandName))
@@ -215,6 +215,7 @@ public sealed class BowlingWindow : Window, IDisposable
     private readonly IObjectTable objectTable;
     private readonly IPlayerState playerState;
     private readonly LifestreamTravel lifestream;
+    private readonly MogCast mogCast;
     private readonly ThrowEmote throwEmote;
     private readonly IFontHandle labelFont;
     private readonly IFontHandle tabFont;
@@ -259,6 +260,7 @@ public sealed class BowlingWindow : Window, IDisposable
 
     public BowlingWindow(
         IDalamudPluginInterface pluginInterface,
+        ICommandManager commandManager,
         IPartyList partyList,
         IObjectTable objectTable,
         IPlayerState playerState,
@@ -273,6 +275,7 @@ public sealed class BowlingWindow : Window, IDisposable
         this.objectTable = objectTable;
         this.playerState = playerState;
         this.lifestream = new LifestreamTravel(pluginInterface);
+        this.mogCast = new MogCast(commandManager);
         this.throwEmote = new ThrowEmote(dataManager, unlockState);
         var dir = pluginInterface.AssemblyLocation.DirectoryName ?? string.Empty;
         var fontPath = Path.Combine(dir, "Assets", "LuckiestGuy-Regular.ttf");
@@ -1002,28 +1005,42 @@ public sealed class BowlingWindow : Window, IDisposable
             new Vector2(origin.X + avail - artW - 36f, origin.Y + 268f),
             artW);
 
+        var atLanes = NclVenue.IsAt(this.playerState);
+        var live = this.mogCast.CanJoinAtVenue(this.playerState);
+
         this.tabFont.Push();
         ImGui.TextColored(NeonTheme.Magenta, "NEON CELESTIAL LANES  ·  JUKEBOX");
         this.tabFont.Pop();
-        ImGui.TextColored(NeonTheme.Muted, "We broadcast on MogCast. That's the watch-party app on Aetherphone.");
+        ImGui.TextColored(
+            live ? NeonTheme.Gold : NeonTheme.Muted,
+            live
+                ? "LIVE at the lanes  ·  tap JOIN MOGCAST to hop on the house screen"
+                : atLanes
+                    ? "You're at the lanes. Install Aetherphone to join MogCast."
+                    : "LIVE lights up when you're at NCL with Aetherphone. MogCast lists nearby screens.");
         ImGui.Dummy(new Vector2(0, 8));
 
         ImGui.TextColored(NeonTheme.Gold, "How to listen");
-        ImGui.TextWrapped("The house screen is on MogCast, so everyone hears and sees the same thing. Tune in on your Aetherphone and you're on the broadcast with the rest of the house.");
+        ImGui.TextWrapped("The house screen is on MogCast, so everyone hears and sees the same thing. The conductor runs it on Aetherphone. Guests join from the house — playback stays in sync.");
         ImGui.Dummy(new Vector2(0, 6));
-        ImGui.BulletText("If you have an Aetherphone: type /phone, open MogCast, and join the NCL broadcast.");
-        ImGui.BulletText("Look for the in-world screen at the lanes. Playback stays in sync.");
-        ImGui.BulletText("No phone yet? Grab Aetherphone, then come back and hop on MogCast.");
+        ImGui.BulletText("At NCL with Aetherphone: LIVE opens MogCast. Join a nearby screen or the house code.");
+        ImGui.BulletText("Look for the in-world screen at the lanes.");
+        ImGui.BulletText("No phone yet? Grab Aetherphone, then come back and hit LIVE.");
         ImGui.Dummy(new Vector2(0, 12));
 
         this.labelFont.Push();
         ImGui.PushStyleColor(ImGuiCol.Text, NeonTheme.Ice);
-        if (NeonTheme.GlowButton("  GET AETHERPHONE  ", NeonTheme.Magenta))
+        ImGui.BeginDisabled(!live);
+        if (NeonTheme.GlowButton("  LIVE  ·  JOIN MOGCAST  ", live ? NeonTheme.Magenta : NeonTheme.Muted) && live)
+            this.mogCast.TryOpen();
+        ImGui.EndDisabled();
+        ImGui.SameLine();
+        if (NeonTheme.GlowButton("  GET AETHERPHONE  ", NeonTheme.Cyan))
             Util.OpenLink(AetherphoneUrl);
         ImGui.PopStyleColor();
         this.labelFont.Pop();
         ImGui.Dummy(new Vector2(0, 8));
-        ImGui.TextColored(NeonTheme.Lavender, "aetherphone.net  ·  /phone  ·  MogCast");
+        ImGui.TextColored(NeonTheme.Lavender, "aetherphone.net  ·  /phone open aetherstream  ·  MogCast");
     }
 
     private void DrawMenuTab()
