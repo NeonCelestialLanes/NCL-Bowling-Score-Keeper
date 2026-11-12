@@ -610,6 +610,10 @@ public sealed class BowlingWindow : Window, IDisposable
             this.status = "Fresh lanes. Don't choke.";
         }
 
+        ImGui.SameLine();
+        if (NeonTheme.GlowButton("  PARTY  ##miniparty", NeonTheme.Gold))
+            this.PostScoresToParty();
+
         ImGui.PopStyleColor();
         this.labelFont.Pop();
         if (clicked && canRoll)
@@ -794,6 +798,10 @@ public sealed class BowlingWindow : Window, IDisposable
             this.ResetThrowTracking();
             this.status = "Fresh lanes. Don't choke.";
         }
+
+        ImGui.SameLine();
+        if (NeonTheme.GlowButton("  PARTY SCORE  ", NeonTheme.Gold))
+            this.PostScoresToParty();
 
         ImGui.SameLine();
         if (NeonTheme.GlowButton("  RULES  ", NeonTheme.Gold))
@@ -1934,6 +1942,70 @@ public sealed class BowlingWindow : Window, IDisposable
             return JoinRolls(frame.Roll1, frame.Roll2, frame.Roll3);
 
         return JoinRolls(frame.Roll1, frame.Roll2);
+    }
+
+    private void PostScoresToParty()
+    {
+        var lines = this.BuildPartyScoreLines();
+        if (lines.Count == 0)
+        {
+            this.status = "Nothing on the sheet to post yet.";
+            return;
+        }
+
+        foreach (var line in lines)
+            this.EnqueueChat($"/p {line}");
+
+        this.status = lines.Count == 1
+            ? "Posted the score to party chat."
+            : $"Posted the score to party chat ({lines.Count} lines).";
+    }
+
+    private List<string> BuildPartyScoreLines()
+    {
+        var parts = new List<string>();
+        foreach (var lane in this.lanes.Visible)
+        {
+            var game = lane.Game;
+            if (game.Rolls.Count == 0 && !game.IsComplete)
+                continue;
+
+            var who = FirstName(lane.IsLocal ? "You" : lane.Name);
+            var tag = game.IsComplete ? "done" : $"F{game.CurrentFrameNumber}";
+            parts.Add($"{who} {game.TotalScore} {tag}");
+        }
+
+        var lines = new List<string>();
+        if (parts.Count == 0)
+            return lines;
+
+        var header = "NCL bowling";
+        var current = header;
+        foreach (var part in parts)
+        {
+            var next = current + " · " + part;
+            if (next.Length <= 450)
+            {
+                current = next;
+                continue;
+            }
+
+            if (current != header)
+                lines.Add(current);
+            current = header + " · " + part;
+        }
+
+        if (current != header)
+            lines.Add(current);
+
+        return lines;
+    }
+
+    private static string FirstName(string name)
+    {
+        var trimmed = name.Trim();
+        var space = trimmed.IndexOf(' ');
+        return space <= 0 ? trimmed : trimmed[..space];
     }
 
     private static string JoinRolls(params string[] parts)
