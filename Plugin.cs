@@ -1270,6 +1270,38 @@ public sealed class BowlingWindow : Window, IDisposable
         this.lastDartTicks = 0;
     }
 
+    private bool IsDuplicateBowl(BowlerLane lane)
+    {
+        if (lane.IsLocal)
+        {
+            if (this.awaitingLocalRoll)
+                return false;
+            return this.bowlsQueued > 0 && this.bowlsScored >= this.bowlsQueued;
+        }
+
+        var now = Environment.TickCount64;
+        if (this.lastScoredId == lane.ContentId && now - this.lastRollTicks < 50)
+            return true;
+        this.lastRollTicks = now;
+        return false;
+    }
+
+    private bool IsDuplicateDart(BowlerLane lane)
+    {
+        if (lane.IsLocal)
+        {
+            if (this.awaitingLocalDart)
+                return false;
+            return this.dartsQueued > 0 && this.dartsScored >= this.dartsQueued;
+        }
+
+        var now = Environment.TickCount64;
+        if (this.lastDartId == lane.ContentId && now - this.lastDartTicks < 50)
+            return true;
+        this.lastDartTicks = now;
+        return false;
+    }
+
     private void EnqueueDartThrow()
     {
         this.dartsQueued++;
@@ -1366,21 +1398,11 @@ public sealed class BowlingWindow : Window, IDisposable
             return true;
         }
 
-        // One click / one /random can print both party dice and "You roll".
-        // Count each queued local throw once, for every pin 0–11. A second
-        // 7, 9, 10, etc. is a new queued throw, not an echo.
-        if (lane.IsLocal)
-        {
-            if (this.bowlsScored >= this.bowlsQueued)
-                return true;
-        }
-        else
-        {
-            var now = Environment.TickCount64;
-            if (this.lastScoredId == lane.ContentId && now - this.lastRollTicks < 50)
-                return true;
-            this.lastRollTicks = now;
-        }
+        // Party /dice and "You roll" are two lines for one throw. Skip that
+        // extra line only. Never skip because queued is 0 (typed /random) or
+        // because Roll was just clicked (awaitingLocalRoll).
+        if (this.IsDuplicateBowl(lane))
+            return true;
 
         if (lane.IsLocal)
             this.awaitingLocalRoll = false;
@@ -1439,18 +1461,8 @@ public sealed class BowlingWindow : Window, IDisposable
             return true;
         }
 
-        if (lane.IsLocal)
-        {
-            if (this.dartsScored >= this.dartsQueued)
-                return true;
-        }
-        else
-        {
-            var now = Environment.TickCount64;
-            if (this.lastDartId == lane.ContentId && now - this.lastDartTicks < 50)
-                return true;
-            this.lastDartTicks = now;
-        }
+        if (this.IsDuplicateDart(lane))
+            return true;
 
         if (lane.IsLocal)
             this.awaitingLocalDart = false;

@@ -62,8 +62,8 @@ internal static class NclVenue
         }
         catch (Exception)
         {
-            // ClientStructs signatures shift on patch day; don't take the plugin down with them.
-            return false;
+            // Don't lock scoring if housing signatures miss after a patch.
+            return true;
         }
     }
 }
