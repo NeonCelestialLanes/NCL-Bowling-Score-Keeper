@@ -11,19 +11,29 @@ internal static class GameChat
     /// </summary>
     public static unsafe void SendCommand(string command)
     {
-        var ui = UIModule.Instance();
-        if (ui is null || string.IsNullOrWhiteSpace(command))
+        if (string.IsNullOrWhiteSpace(command))
             return;
 
-        var message = Utf8String.FromString(command);
         try
         {
-            ui->ProcessChatBoxEntry(message, nint.Zero, false);
+            var ui = UIModule.Instance();
+            if (ui is null)
+                return;
+
+            var message = Utf8String.FromString(command);
+            try
+            {
+                ui->ProcessChatBoxEntry(message, nint.Zero, false);
+            }
+            finally
+            {
+                if (message != null)
+                    message->Dtor(true);
+            }
         }
-        finally
+        catch
         {
-            if (message != null)
-                message->Dtor(true);
+            // Chat-box signatures can miss immediately after a game patch.
         }
     }
 }

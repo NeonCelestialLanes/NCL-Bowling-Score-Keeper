@@ -234,9 +234,13 @@ public sealed class BowlingWindow : Window, IDisposable
     private string guestName = string.Empty;
     private bool awaitingLocalRoll;
     private bool rollClickArmed = true;
-    private string lastRollKey = string.Empty;
+    private string lastChatLine = string.Empty;
+    private long lastChatLineTicks;
     private long lastRollTicks;
-    private int lastRollPins = -1;
+    private int bowlsQueued;
+    private int bowlsScored;
+    private int dartsQueued;
+    private int dartsScored;
     private readonly List<(string Command, long At)> outgoing = new();
     private readonly Dictionary<ulong, bool> sheetOpen = new();
     private long commandReadyAt;
@@ -250,7 +254,6 @@ public sealed class BowlingWindow : Window, IDisposable
     private Vector2 liveWindowSize = new(860, 900);
     private Vector2? pendingSize;
     private Vector2? holdUntilSize;
-    private string lastDartKey = string.Empty;
     private long lastDartTicks;
     private int markDart = 2;
     private ulong? lastDartId;
@@ -372,12 +375,18 @@ public sealed class BowlingWindow : Window, IDisposable
         if (!RollParser.TryParse(text, sender, out var rolledName, out var isYou, out var pins, out var dieSides))
             return false;
 
+        // Same chat line can arrive on ChatMessage and Unhandled. Two real
+        // throws of the same pins (any 0–11) look identical in chat, so do
+        // not drop a line when a local throw is still waiting to score.
         var now = Environment.TickCount64;
-        if (pins == this.lastRollPins && now - this.lastRollTicks < 500)
+        var lineKey = $"{sender}\n{text}";
+        var sameLine = lineKey == this.lastChatLine && now - this.lastChatLineTicks < 50;
+        var localThrowPending = this.bowlsQueued > this.bowlsScored || this.dartsQueued > this.dartsScored;
+        if (sameLine && !localThrowPending)
             return true;
 
-        this.lastRollPins = pins;
-        this.lastRollTicks = now;
+        this.lastChatLine = lineKey;
+        this.lastChatLineTicks = now;
 
         if (dieSides == 10 || (dieSides == 0 && this.awaitingLocalDart))
             return this.ApplyHeardDart(rolledName, sender, text, isYou, pins);
@@ -597,6 +606,7 @@ public sealed class BowlingWindow : Window, IDisposable
             this.outgoing.Clear();
             this.commandReadyAt = 0;
             this.lastScoredId = null;
+            this.ResetThrowTracking();
             this.status = "Fresh lanes. Don't choke.";
         }
 
@@ -606,7 +616,7 @@ public sealed class BowlingWindow : Window, IDisposable
         {
             this.rollClickArmed = false;
             this.awaitingLocalRoll = true;
-            this.EnqueueChat(this.RollCommand());
+            this.QueueBowl();
             this.status = $"Bowling… {local!.Game.RemainingPins} standing.";
         }
 
@@ -670,6 +680,7 @@ public sealed class BowlingWindow : Window, IDisposable
             this.outgoing.Clear();
             this.commandReadyAt = 0;
             this.lastDartId = null;
+            this.ResetThrowTracking();
             this.status = "Fresh clocks. Start at 1.";
         }
 
@@ -767,7 +778,7 @@ public sealed class BowlingWindow : Window, IDisposable
         {
             this.rollClickArmed = false;
             this.awaitingLocalRoll = true;
-            this.EnqueueChat(this.RollCommand());
+            this.QueueBowl();
             this.status = $"Bowling… {local!.Game.RemainingPins} pin(s) still standing. Make it dramatic.";
         }
 
@@ -780,6 +791,7 @@ public sealed class BowlingWindow : Window, IDisposable
             this.outgoing.Clear();
             this.commandReadyAt = 0;
             this.lastScoredId = null;
+            this.ResetThrowTracking();
             this.status = "Fresh lanes. Don't choke.";
         }
 
@@ -900,6 +912,7 @@ public sealed class BowlingWindow : Window, IDisposable
             this.outgoing.Clear();
             this.commandReadyAt = 0;
             this.lastDartId = null;
+            this.ResetThrowTracking();
             this.status = "Fresh clocks. Start at 1.";
         }
 
@@ -1239,8 +1252,27 @@ public sealed class BowlingWindow : Window, IDisposable
         this.EnqueueChat(command, Environment.TickCount64 + Random.Shared.Next(100, 301));
     }
 
+    private void QueueBowl()
+    {
+        this.bowlsQueued++;
+        this.EnqueueChat(this.RollCommand());
+    }
+
+    private void ResetThrowTracking()
+    {
+        this.bowlsQueued = 0;
+        this.bowlsScored = 0;
+        this.dartsQueued = 0;
+        this.dartsScored = 0;
+        this.lastChatLine = string.Empty;
+        this.lastChatLineTicks = 0;
+        this.lastRollTicks = 0;
+        this.lastDartTicks = 0;
+    }
+
     private void EnqueueDartThrow()
     {
+        this.dartsQueued++;
         var dice = this.DartCommand();
         var firstAt = Environment.TickCount64 + Random.Shared.Next(100, 301);
         if (this.throwEmote.IsUnlocked())
@@ -1334,23 +1366,33 @@ public sealed class BowlingWindow : Window, IDisposable
             return true;
         }
 
+        // One click / one /random can print both party dice and "You roll".
+        // Count each queued local throw once, for every pin 0–11. A second
+        // 7, 9, 10, etc. is a new queued throw, not an echo.
+        if (lane.IsLocal)
+        {
+            if (this.bowlsScored >= this.bowlsQueued)
+                return true;
+        }
+        else
+        {
+            var now = Environment.TickCount64;
+            if (this.lastScoredId == lane.ContentId && now - this.lastRollTicks < 50)
+                return true;
+            this.lastRollTicks = now;
+        }
+
         if (lane.IsLocal)
             this.awaitingLocalRoll = false;
-
-        var key = $"{lane.ContentId}:{pins}";
-        var now = Environment.TickCount64;
-        if (key == this.lastRollKey && now - this.lastRollTicks < 800)
-            return true;
-
-        this.lastRollKey = key;
-        this.lastRollTicks = now;
-        this.lastRollPins = pins;
 
         if (!this.lanes.TryApplyRoll(lane, pins, out var counted, out var overshot, out var error))
         {
             this.status = error ?? "Could not apply that roll.";
             return true;
         }
+
+        if (lane.IsLocal)
+            this.bowlsScored++;
 
         var who = lane.IsLocal ? "You" : lane.Name;
         var extra = overshot
@@ -1398,21 +1440,29 @@ public sealed class BowlingWindow : Window, IDisposable
         }
 
         if (lane.IsLocal)
+        {
+            if (this.dartsScored >= this.dartsQueued)
+                return true;
+        }
+        else
+        {
+            var now = Environment.TickCount64;
+            if (this.lastDartId == lane.ContentId && now - this.lastDartTicks < 50)
+                return true;
+            this.lastDartTicks = now;
+        }
+
+        if (lane.IsLocal)
             this.awaitingLocalDart = false;
-
-        var key = $"{lane.ContentId}:d:{pins}";
-        var now = Environment.TickCount64;
-        if (key == this.lastDartKey && now - this.lastDartTicks < 800)
-            return true;
-
-        this.lastDartKey = key;
-        this.lastDartTicks = now;
 
         if (!this.lanes.TryApplyDart(lane, pins, out var hit, out var turnOver, out var error))
         {
             this.status = error ?? "Could not apply that dart.";
             return true;
         }
+
+        if (lane.IsLocal)
+            this.dartsScored++;
 
         this.lastDartId = lane.ContentId;
         var who = lane.IsLocal ? "You" : lane.Name;
@@ -1639,6 +1689,8 @@ public sealed class BowlingWindow : Window, IDisposable
 
         this.awaitingLocalRoll = false;
         this.outgoing.Clear();
+        if (lane.IsLocal && this.bowlsScored > 0)
+            this.bowlsScored--;
         this.status = $"Undid the last ball on {lane.Name}'s lane.";
         if (lane.Game.Rolls.Count == 0)
             this.lastScoredId = null;

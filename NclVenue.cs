@@ -40,22 +40,30 @@ internal static class NclVenue
 
     private static unsafe bool IsNclPlot()
     {
-        var mgr = HousingManager.Instance();
-        if (mgr is null)
-            return false;
+        try
+        {
+            var mgr = HousingManager.Instance();
+            if (mgr is null)
+                return false;
 
-        var plot = mgr->GetCurrentPlot();
-        var ward = mgr->GetCurrentWard();
-        if (plot < 0 || ward < 0)
-            return false;
+            var plot = mgr->GetCurrentPlot();
+            var ward = mgr->GetCurrentWard();
+            if (plot < 0 || ward < 0)
+                return false;
 
-        if (ward + 1 != Ward || plot + 1 != Plot)
-            return false;
+            if (ward + 1 != Ward || plot + 1 != Plot)
+                return false;
 
-        var house = mgr->GetCurrentHouseId();
-        if (house.WorldId != 0 && house.WorldId != GoblinWorldId)
-            return false;
+            var house = mgr->GetCurrentHouseId();
+            if (house.WorldId != 0 && house.WorldId != GoblinWorldId)
+                return false;
 
-        return true;
+            return true;
+        }
+        catch (Exception)
+        {
+            // ClientStructs signatures shift on patch day; don't take the plugin down with them.
+            return false;
+        }
     }
 }
