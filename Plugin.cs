@@ -611,7 +611,7 @@ public sealed class BowlingWindow : Window, IDisposable
         }
 
         ImGui.SameLine();
-        if (NeonTheme.GlowButton("  PARTY  ##miniparty", NeonTheme.Gold))
+        if (NeonTheme.GlowButton("  PARTY  ##miniparty", NeonTheme.NeonPink))
             this.PostScoresToParty();
 
         ImGui.PopStyleColor();
@@ -800,7 +800,7 @@ public sealed class BowlingWindow : Window, IDisposable
         }
 
         ImGui.SameLine();
-        if (NeonTheme.GlowButton("  PARTY SCORE  ", NeonTheme.Gold))
+        if (NeonTheme.GlowButton("  PARTY SCORE  ", NeonTheme.NeonPink))
             this.PostScoresToParty();
 
         ImGui.SameLine();
